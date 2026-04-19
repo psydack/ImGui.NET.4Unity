@@ -1,9 +1,11 @@
 name: CI
 on:
   push:
-    branches: [ main ]
+    branches: [ main, master ]
+    tags:
+      - 'v*'
   pull_request:
-    branches: [ main ]
+    branches: [ main, master ]
 jobs:
   Build_Windows:
     runs-on: windows-latest
