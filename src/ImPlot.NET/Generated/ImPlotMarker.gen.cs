@@ -2,7 +2,8 @@ namespace ImPlotNET
 {
     public enum ImPlotMarker
     {
-        None = -1,
+        None = -2,
+        Auto = -1,
         Circle = 0,
         Square = 1,
         Diamond = 2,

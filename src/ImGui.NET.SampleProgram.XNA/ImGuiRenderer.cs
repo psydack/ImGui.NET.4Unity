@@ -30,9 +30,9 @@ namespace ImGuiNET.SampleProgram.XNA
 
         // Textures
         private Dictionary<IntPtr, Texture2D> _loadedTextures;
+        private HashSet<IntPtr> _ownedBackendTextureIds;
 
-        private int _textureId;
-        private IntPtr? _fontTextureId;
+        private int _textureId = 1;
 
         // Input
         private int _scrollWheelValue;
@@ -49,6 +49,7 @@ namespace ImGuiNET.SampleProgram.XNA
             _graphicsDevice = game.GraphicsDevice;
 
             _loadedTextures = new Dictionary<IntPtr, Texture2D>();
+            _ownedBackendTextureIds = new HashSet<IntPtr>();
 
             _rasterizerState = new RasterizerState()
             {
@@ -60,6 +61,8 @@ namespace ImGuiNET.SampleProgram.XNA
                 SlopeScaleDepthBias = 0
             };
 
+            ImGui.GetIO().BackendFlags |= ImGuiBackendFlags.RendererHasTextures;
+
             SetupInput();
         }
 
@@ -70,27 +73,7 @@ namespace ImGuiNET.SampleProgram.XNA
         /// </summary>
         public virtual unsafe void RebuildFontAtlas()
         {
-            // Get font texture from ImGui
-            var io = ImGui.GetIO();
-            io.Fonts.GetTexDataAsRGBA32(out byte* pixelData, out int width, out int height, out int bytesPerPixel);
-
-            // Copy the data to a managed array
-            var pixels = new byte[width * height * bytesPerPixel];
-            unsafe { Marshal.Copy(new IntPtr(pixelData), pixels, 0, pixels.Length); }
-
-            // Create and register the texture as an XNA texture
-            var tex2d = new Texture2D(_graphicsDevice, width, height, false, SurfaceFormat.Color);
-            tex2d.SetData(pixels);
-
-            // Should a texture already have been build previously, unbind it first so it can be deallocated
-            if (_fontTextureId.HasValue) UnbindTexture(_fontTextureId.Value);
-
-            // Bind the new texture to an ImGui-friendly id
-            _fontTextureId = BindTexture(tex2d);
-
-            // Let ImGui know where to find the texture
-            io.Fonts.SetTexID(_fontTextureId.Value);
-            io.Fonts.ClearTexData(); // Clears CPU side texture data
+            // ImGui 1.92+ requests font texture creation through ImDrawData.Textures during rendering.
         }
 
         /// <summary>
@@ -111,6 +94,7 @@ namespace ImGuiNET.SampleProgram.XNA
         public virtual void UnbindTexture(IntPtr textureId)
         {
             _loadedTextures.Remove(textureId);
+            _ownedBackendTextureIds.Remove(textureId);
         }
 
         /// <summary>
@@ -313,6 +297,8 @@ namespace ImGuiNET.SampleProgram.XNA
 
             UpdateBuffers(drawData);
 
+            ProcessTextureUpdates(drawData);
+
             RenderCommandLists(drawData);
 
             // Restore modified state
@@ -395,9 +381,10 @@ namespace ImGuiNET.SampleProgram.XNA
                         continue;
                     }
 
-                    if (!_loadedTextures.ContainsKey(drawCmd.TextureId))
+                    IntPtr textureId = drawCmd.GetTexID();
+                    if (!_loadedTextures.ContainsKey(textureId))
                     {
-                        throw new InvalidOperationException($"Could not find a texture with id '{drawCmd.TextureId}', please check your bindings");
+                        throw new InvalidOperationException($"Could not find a texture with id '{textureId}', please check your bindings");
                     }
 
                     _graphicsDevice.ScissorRectangle = new Rectangle(
@@ -407,7 +394,7 @@ namespace ImGuiNET.SampleProgram.XNA
                         (int)(drawCmd.ClipRect.W - drawCmd.ClipRect.Y)
                     );
 
-                    var effect = UpdateEffect(_loadedTextures[drawCmd.TextureId]);
+                    var effect = UpdateEffect(_loadedTextures[textureId]);
 
                     foreach (var pass in effect.CurrentTechnique.Passes)
                     {
@@ -429,6 +416,81 @@ namespace ImGuiNET.SampleProgram.XNA
                 vtxOffset += cmdList.VtxBuffer.Size;
                 idxOffset += cmdList.IdxBuffer.Size;
             }
+        }
+
+        private unsafe void ProcessTextureUpdates(ImDrawDataPtr drawData)
+        {
+            if (drawData.NativePtr->Textures == null)
+            {
+                return;
+            }
+
+            ImVector<ImTextureDataPtr> textures = drawData.Textures;
+            for (int i = 0; i < textures.Size; i++)
+            {
+                ImTextureDataPtr texData = textures[i];
+                switch (texData.Status)
+                {
+                    case ImTextureStatus.WantCreate:
+                        CreateBackendTexture(texData);
+                        break;
+                    case ImTextureStatus.WantUpdates:
+                        UpdateBackendTexture(texData);
+                        break;
+                    case ImTextureStatus.WantDestroy when texData.UnusedFrames > 0:
+                        DestroyBackendTexture(texData);
+                        break;
+                }
+            }
+        }
+
+        private unsafe void CreateBackendTexture(ImTextureDataPtr texData)
+        {
+            if (texData.Format != ImTextureFormat.RGBA32)
+            {
+                throw new NotSupportedException($"Unsupported ImGui texture format: {texData.Format}");
+            }
+
+            Texture2D texture = new Texture2D(_graphicsDevice, texData.Width, texData.Height, false, SurfaceFormat.Color);
+            texture.SetData(CopyTexturePixels(texData));
+
+            IntPtr textureId = BindTexture(texture);
+            _ownedBackendTextureIds.Add(textureId);
+
+            texData.SetTexID(textureId);
+            texData.SetStatus(ImTextureStatus.OK);
+        }
+
+        private unsafe void UpdateBackendTexture(ImTextureDataPtr texData)
+        {
+            if (!_loadedTextures.TryGetValue(texData.TexID, out Texture2D texture))
+            {
+                throw new InvalidOperationException("Cannot update an ImGui texture that was not created by this renderer.");
+            }
+
+            texture.SetData(CopyTexturePixels(texData));
+            texData.SetStatus(ImTextureStatus.OK);
+        }
+
+        private void DestroyBackendTexture(ImTextureDataPtr texData)
+        {
+            IntPtr textureId = texData.TexID;
+            if (_loadedTextures.TryGetValue(textureId, out Texture2D texture) &&
+                _ownedBackendTextureIds.Contains(textureId))
+            {
+                texture.Dispose();
+            }
+
+            UnbindTexture(textureId);
+            texData.SetTexID(IntPtr.Zero);
+            texData.SetStatus(ImTextureStatus.Destroyed);
+        }
+
+        private unsafe byte[] CopyTexturePixels(ImTextureDataPtr texData)
+        {
+            byte[] pixels = new byte[texData.GetSizeInBytes()];
+            Marshal.Copy(texData.GetPixels(), pixels, 0, pixels.Length);
+            return pixels;
         }
 
         #endregion Internals

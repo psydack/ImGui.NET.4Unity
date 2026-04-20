@@ -24,9 +24,20 @@
     <ProjectReference Include="..\ImGui.NET\ImGui.NET.csproj" />
   </ItemGroup>
   <ItemGroup>
-    <Folder Include="build\net40" />
-  </ItemGroup>
-  <ItemGroup>
-    <None Remove="build\net40\ImPlot.NET.targets" />
+    <Content Condition="Exists('..\..\deps\cimplot\win-x64\cimplot.dll')" Include="..\..\deps\cimplot\win-x64\cimplot.dll">
+      <PackagePath>runtimes/win-x64/native</PackagePath>
+      <Pack>true</Pack>
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
+    <Content Condition="Exists('..\..\deps\cimplot\linux-x64\cimplot.so')" Include="..\..\deps\cimplot\linux-x64\cimplot.so">
+      <PackagePath>runtimes/linux-x64/native/libcimplot.so</PackagePath>
+      <Pack>true</Pack>
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
+    <Content Condition="Exists('..\..\deps\cimplot\osx\cimplot.dylib')" Include="..\..\deps\cimplot\osx\cimplot.dylib">
+      <PackagePath>runtimes/osx/native/libcimplot.dylib</PackagePath>
+      <Pack>true</Pack>
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
   </ItemGroup>
 </Project>

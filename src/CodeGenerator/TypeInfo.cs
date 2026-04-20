@@ -37,7 +37,13 @@ namespace CodeGenerator
             { "ImDrawCallback", "IntPtr" },
             { "size_t", "uint" },
             { "ImGuiContext*", "IntPtr" },
+            { "ImGuiWindow", "IntPtr" },
+            { "ImGuiWindow*", "IntPtr" },
             { "ImPlotContext*", "IntPtr" },
+            { "ImNodesContext", "IntPtr" },
+            { "ImNodesContext*", "IntPtr" },
+            { "ImNodesEditorContext", "IntPtr" },
+            { "ImNodesEditorContext*", "IntPtr" },
             { "EditorContext*", "IntPtr" },
             { "ImGuiMemAllocFunc", "IntPtr" },
             { "ImGuiMemFreeFunc", "IntPtr" },
@@ -55,8 +61,31 @@ namespace CodeGenerator
             { "ImPlotFormatter", "IntPtr" },
             { "ImPlotGetter", "IntPtr" },
             { "ImPlotTransform", "IntPtr" },
+            { "ImPlotPoint_c", "ImPlotPoint" },
+            { "ImPlotRect_c", "ImPlotRect" },
+            { "ImPlotPoint_getter", "IntPtr" },
+            { "ImNodesMiniMapNodeHoveringCallback", "IntPtr" },
+            { "ImNodesMiniMapNodeHoveringCallbackUserData", "IntPtr" },
             { "ImGuiKeyChord", "ImGuiKey" },
             { "ImGuiSelectionUserData", "long" },
+            // By-value struct return types added in cimgui 1.92.7.
+            { "ImVec2_c", "Vector2" },
+            { "ImVec4_c", "Vector4" },
+            { "ImColor_c", "ImColor" },
+            { "ImTextureRef_c", "ImTextureRef" },
+            // Handle/ID type used by font atlas rect management.
+            { "ImFontAtlasRectId", "uint" },
+            // Internal types exposed via public ImFontAtlas API are opaque.
+            { "ImFontAtlasBuilder", "IntPtr" },
+            { "ImFontAtlasBuilder*", "IntPtr" },
+            { "ImFontLoader", "IntPtr" },
+            { "ImFontLoader*", "IntPtr" },
+            { "const ImFontLoader", "IntPtr" },
+            { "const ImFontLoader*", "IntPtr" },
+            // Internal enum now referenced from public ImFont API.
+            { "ImDrawTextFlags", "int" },
+            // Identity mapping prevents spurious Ptr wrapper generation.
+            { "ImGuiFreeTypeLoaderFlags", "ImGuiFreeTypeLoaderFlags" },
         };
         
         public static readonly List<string> WellKnownEnums = new List<string>()
@@ -105,6 +134,8 @@ namespace CodeGenerator
             { "ImVec4(0,0,0,-1)", "new Vector4(0, 0, 0, -1)" },
             { "ImPlotPoint(0,0)", "new ImPlotPoint { x = 0, y = 0 }" },
             { "ImPlotPoint(1,1)", "new ImPlotPoint { x = 1, y = 1 }" },
+            { "ImPlotSpec()", "new ImPlotSpec()" },
+            { "IMPLOT_AUTO_COL", "new Vector4(0, 0, 0, -1)" },
             { "ImDrawCornerFlags_All", "ImDrawCornerFlags.All" },
             { "ImPlotFlags_None", "ImPlotFlags.None"},
             { "ImPlotAxisFlags_None", "ImPlotAxisFlags.None"},
@@ -112,6 +143,8 @@ namespace CodeGenerator
             { "ImGuiCond_Once", "ImGuiCond.Once"},
             { "ImPlotOrientation_Vertical", "ImPlotOrientation.Vertical"},
             { "PinShape_CircleFilled", "PinShape.CircleFilled"},
+            { "ImNodesPinShape_CircleFilled", "ImNodesPinShape.CircleFilled"},
+            { "ImNodesMiniMapLocation_TopLeft", "ImNodesMiniMapLocation.TopLeft"},
             { "ImGuiPopupFlags_None", "ImGuiPopupFlags.None"},
             { "ImGuiNavHighlightFlags_TypeDefault", "ImGuiNavHighlightFlags.TypeDefault"},
             { "ImGuiKeyModFlags_Ctrl", "ImGuiKeyModFlags.Ctrl"},

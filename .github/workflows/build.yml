@@ -1,10 +1,11 @@
 name: CI
 on:
-  create: # when tags are created
   push:
-    branches: [ master ]
+    branches: [ main, master ]
+    tags:
+      - 'v*'
   pull_request:
-    branches: [ master ]
+    branches: [ main, master ]
 jobs:
   Build_Windows:
     runs-on: windows-latest
@@ -42,3 +43,93 @@ jobs:
     - name: Publish to nuget.org
       if: startsWith(github.ref, 'refs/tags/')
       run: dotnet nuget push bin\Release\ImGui.NET\*.nupkg -s https://api.nuget.org/v3/index.json --api-key ${{secrets.NUGET_KEY}}
+
+  Release_Artifacts:
+    runs-on: windows-latest
+    if: startsWith(github.ref, 'refs/tags/')
+    needs: Build_Windows
+    steps:
+    - name: Checkout Repository
+      uses: actions/checkout@v4
+      with:
+        fetch-depth: 0
+
+    - name: Install .NET
+      uses: actions/setup-dotnet@v4
+      with:
+        dotnet-version: 8.0.x
+
+    - name: Download native deps
+      shell: bash
+      run: |
+        ./download-native-deps.sh
+
+    - name: Build Release
+      run: dotnet build -c Release src
+
+    - name: Build Debug
+      run: dotnet build -c Debug src
+
+    - name: Stage artifacts
+      shell: pwsh
+      run: |
+        $root = "$env:GITHUB_WORKSPACE"
+        $out  = "$root/artifacts"
+
+        $libs = @(
+          @{ name = "imgui";    managed = "ImGui.NET";    native = "cimgui";    ext = "dll"; soName = "cimgui"    },
+          @{ name = "implot";   managed = "ImPlot.NET";   native = "cimplot";   ext = "dll"; soName = "cimplot"   },
+          @{ name = "imnodes";  managed = "ImNodes.NET";  native = "cimnodes";  ext = "dll"; soName = "cimnodes"  },
+          @{ name = "imguizmo"; managed = "ImGuizmo.NET"; native = "cimguizmo"; ext = "dll"; soName = "cimguizmo" }
+        )
+
+        foreach ($lib in $libs) {
+          $dir = "$out/$($lib.name)"
+          New-Item -ItemType Directory -Force -Path "$dir/win-x64"   | Out-Null
+          New-Item -ItemType Directory -Force -Path "$dir/linux-x64" | Out-Null
+          New-Item -ItemType Directory -Force -Path "$dir/osx"       | Out-Null
+
+          # Managed DLLs
+          $relDll   = "$root/bin/Release/$($lib.managed)/net8.0/$($lib.managed).dll"
+          $debugDll = "$root/bin/Debug/$($lib.managed)/net8.0/$($lib.managed).dll"
+          if (Test-Path $relDll)   { Copy-Item $relDll   "$dir/$($lib.managed).dll" }
+          if (Test-Path $debugDll) { Copy-Item $debugDll "$dir/$($lib.managed).Debug.dll" }
+
+          # Native binaries (optional — skip if not present)
+          $nativeBase = "$root/deps/$($lib.native)"
+          $winDll  = "$nativeBase/win-x64/$($lib.native).dll"
+          $linSo   = "$nativeBase/linux-x64/$($lib.native).so"
+          $osxDylib= "$nativeBase/osx/$($lib.native).dylib"
+          if (Test-Path $winDll)   { Copy-Item $winDll   "$dir/win-x64/$($lib.native).dll" }
+          if (Test-Path $linSo)    { Copy-Item $linSo    "$dir/linux-x64/$($lib.native).so" }
+          if (Test-Path $osxDylib) { Copy-Item $osxDylib "$dir/osx/$($lib.native).dylib" }
+        }
+
+        # Zip everything
+        Compress-Archive -Path "$out/*" -DestinationPath "$out/artifacts.zip"
+        Write-Host "Artifact structure:"
+        Get-ChildItem -Recurse $out | Where-Object { -not $_.PSIsContainer } | Select-Object FullName
+
+    - name: Create GitHub Release
+      uses: softprops/action-gh-release@v2
+      with:
+        files: |
+          artifacts/artifacts.zip
+          artifacts/imgui/*
+          artifacts/imgui/win-x64/*
+          artifacts/imgui/linux-x64/*
+          artifacts/imgui/osx/*
+          artifacts/implot/*
+          artifacts/implot/win-x64/*
+          artifacts/implot/linux-x64/*
+          artifacts/implot/osx/*
+          artifacts/imnodes/*
+          artifacts/imnodes/win-x64/*
+          artifacts/imnodes/linux-x64/*
+          artifacts/imnodes/osx/*
+          artifacts/imguizmo/*
+          artifacts/imguizmo/win-x64/*
+          artifacts/imguizmo/linux-x64/*
+          artifacts/imguizmo/osx/*
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
