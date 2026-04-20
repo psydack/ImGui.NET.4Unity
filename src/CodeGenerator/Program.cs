@@ -44,8 +44,12 @@ namespace CodeGenerator
             {
                 "cimgui" => "ImGuiNET",
                 "cimplot" => "ImPlotNET",
+                "cimplot3d" => "ImPlot3DNET",
                 "cimnodes" => "imnodesNET",
+                "cimnodes_r" => "ImNodesRNET",
                 "cimguizmo" => "ImGuizmoNET",
+                "cimguizmo_quat" => "ImGuizmoQuatNET",
+                "cimCTE" => "CimCTENET",
                 _ => throw new NotImplementedException($"Library \"{libraryName}\" is not supported.")
             };
 
@@ -53,8 +57,12 @@ namespace CodeGenerator
             {
                 "cimgui" => false,
                 "cimplot" => true,
+                "cimplot3d" => true,
                 "cimnodes" => true,
+                "cimnodes_r" => true,
                 "cimguizmo" => true,
+                "cimguizmo_quat" => true,
+                "cimCTE" => true,
                 _ => throw new NotImplementedException($"Library \"{libraryName}\" is not supported.")
             };
 
@@ -62,8 +70,12 @@ namespace CodeGenerator
             {
                 "cimgui" => "ImGui",
                 "cimplot" => "ImPlot",
+                "cimplot3d" => "ImPlot3D",
                 "cimnodes" => "imnodes",
+                "cimnodes_r" => "ImNodesR",
                 "cimguizmo" => "ImGuizmo",
+                "cimguizmo_quat" => "ImGuizmoQuat",
+                "cimCTE" => "CimCTE",
                 _ => throw new NotImplementedException($"Library \"{libraryName}\" is not supported.")
             };
 
@@ -71,8 +83,12 @@ namespace CodeGenerator
             {
                 "cimgui" => "cimgui",
                 "cimplot" => "cimplot",
+                "cimplot3d" => "cimplot3d",
                 "cimnodes" => "cimnodes",
+                "cimnodes_r" => "cimnodes_r",
                 "cimguizmo" => "cimguizmo",
+                "cimguizmo_quat" => "cimguizmo_quat",
+                "cimCTE" => "cimCTE",
                 _ => throw new NotImplementedException()
             };
             
@@ -217,6 +233,7 @@ namespace CodeGenerator
                         }
                     }
 
+                    HashSet<string> emittedMethods = new HashSet<string>();
                     foreach (FunctionDefinition fd in defs.Functions)
                     {
                         foreach (OverloadDefinition overload in fd.Overloads)
@@ -267,7 +284,7 @@ namespace CodeGenerator
                                 {
                                     defaults.Add(orderedDefaults[j].Key, orderedDefaults[j].Value);
                                 }
-                                EmitOverload(writer, overload, defaults, "NativePtr", classPrefix);
+                                EmitOverload(writer, overload, defaults, "NativePtr", classPrefix, emittedMethods);
                             }
                         }
                     }
@@ -289,6 +306,7 @@ namespace CodeGenerator
                 writer.WriteLine(string.Empty);
                 writer.PushBlock($"namespace {projectNamespace}");
                 writer.PushBlock($"public static unsafe partial class {classPrefix}Native");
+                HashSet<string> emittedNativeMethods = new HashSet<string>();
                 foreach (FunctionDefinition fd in defs.Functions)
                 {
                     foreach (OverloadDefinition overload in fd.Overloads)
@@ -326,12 +344,13 @@ namespace CodeGenerator
 
                         if (hasVaList) { continue; }
 
-                        string parameters = string.Join(", ", paramParts);
-
                         bool isUdtVariant = exportedName.Contains("nonUDT");
                         string methodName = isUdtVariant
                             ? exportedName.Substring(0, exportedName.IndexOf("_nonUDT"))
                             : exportedName;
+                        string parameters = string.Join(", ", paramParts);
+                        string nativeSignature = $"{ret} {methodName}({parameters})";
+                        if (!emittedNativeMethods.Add(nativeSignature)) { continue; }
 
                         if (isUdtVariant)
                         {
@@ -362,6 +381,7 @@ namespace CodeGenerator
                 writer.WriteLine(string.Empty);
                 writer.PushBlock($"namespace {projectNamespace}");
                 writer.PushBlock($"public static unsafe partial class {classPrefix}");
+                HashSet<string> emittedMethods = new HashSet<string>();
                 foreach (FunctionDefinition fd in defs.Functions)
                 {
                     if (TypeInfo.SkippedFunctions.Contains(fd.Name)) { continue; }
@@ -406,10 +426,10 @@ namespace CodeGenerator
                             if (overload.IsMemberFunction) { continue; }
                             Dictionary<string, string> defaults = new Dictionary<string, string>();
                             for (int j = 0; j < i; j++)
-                            {
-                                defaults.Add(orderedDefaults[j].Key, orderedDefaults[j].Value);
-                            }
-                            EmitOverload(writer, overload, defaults, null, classPrefix);
+                                {
+                                    defaults.Add(orderedDefaults[j].Key, orderedDefaults[j].Value);
+                                }
+                            EmitOverload(writer, overload, defaults, null, classPrefix, emittedMethods);
                         }
                     }
                 }
@@ -455,7 +475,8 @@ namespace CodeGenerator
             OverloadDefinition overload,
             Dictionary<string, string> defaultValues,
             string selfName,
-            string classPrefix)
+            string classPrefix,
+            HashSet<string> emittedMethods)
         {
             var rangeParams = overload.Parameters.Where(tr => 
                 tr.Name.EndsWith("_begin") || 
@@ -698,12 +719,22 @@ namespace CodeGenerator
             {
                 string readOnlySpanInvocationList = string.Join(", ", invocationArgs.Select(a => $"{(a.MarshalledType == "string" ? "ReadOnlySpan<char>" : a.MarshalledType)} {a.CorrectedIdentifier}"));
 
-                writer.WriteRaw("#if NETSTANDARD2_1_OR_GREATER || NETCOREAPP2_1_OR_GREATER");
-                WriteMethod(writer, overload, selfName, classPrefix, staticPortion, overrideRet, safeRet, friendlyName, readOnlySpanInvocationList, preCallLines, marshalledParameters, selfIndex, pOutIndex, nativeRet, postCallLines, isWrappedType);
-                writer.WriteRaw("#endif");
+                string readOnlySpanTypes = string.Join(", ", invocationArgs.Select(a => a.MarshalledType == "string" ? "ReadOnlySpan<char>" : a.MarshalledType));
+                string readOnlySpanSignature = $"{staticPortion}{overrideRet ?? safeRet} {friendlyName}({readOnlySpanTypes})";
+                if (emittedMethods.Add(readOnlySpanSignature))
+                {
+                    writer.WriteRaw("#if NETSTANDARD2_1_OR_GREATER || NETCOREAPP2_1_OR_GREATER");
+                    WriteMethod(writer, overload, selfName, classPrefix, staticPortion, overrideRet, safeRet, friendlyName, readOnlySpanInvocationList, preCallLines, marshalledParameters, selfIndex, pOutIndex, nativeRet, postCallLines, isWrappedType);
+                    writer.WriteRaw("#endif");
+                }
             }
 
-            WriteMethod(writer, overload, selfName, classPrefix, staticPortion, overrideRet, safeRet, friendlyName, invocationList, preCallLines, marshalledParameters, selfIndex, pOutIndex, nativeRet, postCallLines, isWrappedType);
+            string invocationTypes = string.Join(", ", invocationArgs.Select(a => a.MarshalledType));
+            string signature = $"{staticPortion}{overrideRet ?? safeRet} {friendlyName}({invocationTypes})";
+            if (emittedMethods.Add(signature))
+            {
+                WriteMethod(writer, overload, selfName, classPrefix, staticPortion, overrideRet, safeRet, friendlyName, invocationList, preCallLines, marshalledParameters, selfIndex, pOutIndex, nativeRet, postCallLines, isWrappedType);
+            }
         }
 
         private static void WriteMethod(
