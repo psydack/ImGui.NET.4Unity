@@ -99,7 +99,7 @@ namespace ImGuiNET
             // _memoryEditor = new MemoryEditor();
 
             ImPlot.CreateContext();
-            imnodes.Initialize();
+            imnodes.CreateContext();
             InitGizmoMatrices();
 
             Random random = new Random();
@@ -133,7 +133,7 @@ namespace ImGuiNET
             _cl.Dispose();
             _gd.Dispose();
 
-            imnodes.Shutdown();
+            imnodes.DestroyContext();
             ImPlot.DestroyContext();
         }
 
@@ -225,8 +225,8 @@ namespace ImGuiNET
                     ImGui.CheckboxFlags("ImGuiTabBarFlags_NoCloseWithMiddleMouseButton", ref s_tab_bar_flags, (uint)ImGuiTabBarFlags.NoCloseWithMiddleMouseButton);
                     if ((s_tab_bar_flags & (uint)ImGuiTabBarFlags.FittingPolicyMask) == 0)
                         s_tab_bar_flags |= (uint)ImGuiTabBarFlags.FittingPolicyDefault;
-                    if (ImGui.CheckboxFlags("ImGuiTabBarFlags_FittingPolicyResizeDown", ref s_tab_bar_flags, (uint)ImGuiTabBarFlags.FittingPolicyResizeDown))
-                        s_tab_bar_flags &= ~((uint)ImGuiTabBarFlags.FittingPolicyMask ^ (uint)ImGuiTabBarFlags.FittingPolicyResizeDown);
+                    if (ImGui.CheckboxFlags("ImGuiTabBarFlags_FittingPolicyShrink", ref s_tab_bar_flags, (uint)ImGuiTabBarFlags.FittingPolicyShrink))
+                        s_tab_bar_flags &= ~((uint)ImGuiTabBarFlags.FittingPolicyMask ^ (uint)ImGuiTabBarFlags.FittingPolicyShrink);
                     if (ImGui.CheckboxFlags("ImGuiTabBarFlags_FittingPolicyScroll", ref s_tab_bar_flags, (uint)ImGuiTabBarFlags.FittingPolicyScroll))
                         s_tab_bar_flags &= ~((uint)ImGuiTabBarFlags.FittingPolicyMask ^ (uint)ImGuiTabBarFlags.FittingPolicyScroll);
 

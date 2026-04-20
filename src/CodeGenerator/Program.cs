@@ -172,6 +172,7 @@ namespace CodeGenerator
                         }
                         else if (typeStr.Contains("ImVector"))
                         {
+                            string vectorSource = typeStr.EndsWith("*") ? $"*(NativePtr->{field.Name})" : $"NativePtr->{field.Name}";
                             string vectorElementType = GetTypeString(field.TemplateType, false);
 
                             if (TypeInfo.WellKnownTypes.TryGetValue(vectorElementType, out string wellKnown))
@@ -181,7 +182,7 @@ namespace CodeGenerator
 
                             if (GetWrappedType(vectorElementType + "*", out string wrappedElementType))
                             {
-                                writer.WriteLine($"public ImPtrVector<{wrappedElementType}> {field.Name} => new ImPtrVector<{wrappedElementType}>(NativePtr->{field.Name}, Unsafe.SizeOf<{vectorElementType}>());");
+                                writer.WriteLine($"public ImPtrVector<{wrappedElementType}> {field.Name} => new ImPtrVector<{wrappedElementType}>({vectorSource}, Unsafe.SizeOf<{vectorElementType}>());");
                             }
                             else
                             {
@@ -189,7 +190,7 @@ namespace CodeGenerator
                                 {
                                     vectorElementType = wrappedElementType;
                                 }
-                                writer.WriteLine($"public ImVector<{vectorElementType}> {field.Name} => new ImVector<{vectorElementType}>(NativePtr->{field.Name});");
+                                writer.WriteLine($"public ImVector<{vectorElementType}> {field.Name} => new ImVector<{vectorElementType}>({vectorSource});");
                             }
                         }
                         else
@@ -238,6 +239,7 @@ namespace CodeGenerator
                                 exportedName = exportedName.Substring(2, exportedName.Length - 2);
                             }
                             if (exportedName.Contains("~")) { continue; }
+                            if (overload.ExportedName.EndsWith("_LJ")) { continue; }
                             if (overload.Parameters.Any(tr => tr.Type.Contains('('))) { continue; } // TODO: Parse function pointer parameters.
 
                             bool hasVaList = false;
@@ -372,6 +374,7 @@ namespace CodeGenerator
                             exportedName = exportedName.Substring(2, exportedName.Length - 2);
                         }
                         if (exportedName.Contains("~")) { continue; }
+                        if (overload.ExportedName.EndsWith("_LJ")) { continue; }
                         if (overload.Parameters.Any(tr => tr.Type.Contains('('))) { continue; } // TODO: Parse function pointer parameters.
                         
                         if ((overload.FriendlyName == "GetID" || overload.FriendlyName == "PushID") && overload.Parameters.Length > 1)
@@ -582,6 +585,10 @@ namespace CodeGenerator
                     {
                         correctedDefault = defaultVal;
                     }
+                    if (nativeTypeName == "IntPtr" && correctedDefault == "null")
+                    {
+                        correctedDefault = "IntPtr.Zero";
+                    }
                     marshalledParameters[i] = new MarshalledParameter(nativeTypeName, false, correctedIdentifier, true);
                     preCallLines.Add($"{nativeTypeName} {correctedIdentifier} = {correctedDefault};");
                 }
@@ -638,6 +645,10 @@ namespace CodeGenerator
                     string nativeArgName = "native_" + tr.Name;
                     marshalledParameters[i] = new MarshalledParameter("IntPtr", false, nativeArgName, false);
                     preCallLines.Add($"{nativePtrTypeName} {nativeArgName} = ({nativePtrTypeName}){correctedIdentifier}.ToPointer();");
+                }
+                else if (nativeTypeName == "IntPtr" && tr.Type.EndsWith("*"))
+                {
+                    marshalledParameters[i] = new MarshalledParameter("IntPtr", false, correctedIdentifier, false);
                 }
                 else if (GetWrappedType(tr.Type, out string wrappedParamType)
                     && !TypeInfo.WellKnownTypes.ContainsKey(tr.Type)
@@ -867,6 +878,12 @@ namespace CodeGenerator
             }
 
             if (TypeInfo.WellKnownDefaultValues.TryGetValue(defaultVal, out correctedDefault)) { return true; }
+
+            if (defaultVal == "IMPLOT_AUTO")
+            {
+                correctedDefault = tr.IsEnum ? $"({tr.Type})(-1)" : "-1";
+                return true;
+            }
 
             if (tr.Type == "bool")
             {

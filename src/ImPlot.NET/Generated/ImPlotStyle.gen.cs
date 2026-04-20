@@ -8,15 +8,8 @@ namespace ImPlotNET
 {
     public unsafe partial struct ImPlotStyle
     {
-        public float LineWeight;
-        public int Marker;
-        public float MarkerSize;
-        public float MarkerWeight;
-        public float FillAlpha;
-        public float ErrorBarSize;
-        public float ErrorBarWeight;
-        public float DigitalBitHeight;
-        public float DigitalBitGap;
+        public Vector2 PlotDefaultSize;
+        public Vector2 PlotMinSize;
         public float PlotBorderSize;
         public float MinorAlpha;
         public Vector2 MajorTickLen;
@@ -33,8 +26,8 @@ namespace ImPlotNET
         public Vector2 MousePosPadding;
         public Vector2 AnnotationPadding;
         public Vector2 FitPadding;
-        public Vector2 PlotDefaultSize;
-        public Vector2 PlotMinSize;
+        public float DigitalPadding;
+        public float DigitalSpacing;
         public Vector4 Colors_0;
         public Vector4 Colors_1;
         public Vector4 Colors_2;
@@ -51,11 +44,6 @@ namespace ImPlotNET
         public Vector4 Colors_13;
         public Vector4 Colors_14;
         public Vector4 Colors_15;
-        public Vector4 Colors_16;
-        public Vector4 Colors_17;
-        public Vector4 Colors_18;
-        public Vector4 Colors_19;
-        public Vector4 Colors_20;
         public ImPlotColormap Colormap;
         public byte UseLocalTime;
         public byte UseISO8601;
@@ -69,15 +57,8 @@ namespace ImPlotNET
         public static implicit operator ImPlotStylePtr(ImPlotStyle* nativePtr) => new ImPlotStylePtr(nativePtr);
         public static implicit operator ImPlotStyle* (ImPlotStylePtr wrappedPtr) => wrappedPtr.NativePtr;
         public static implicit operator ImPlotStylePtr(IntPtr nativePtr) => new ImPlotStylePtr(nativePtr);
-        public ref float LineWeight => ref Unsafe.AsRef<float>(&NativePtr->LineWeight);
-        public ref int Marker => ref Unsafe.AsRef<int>(&NativePtr->Marker);
-        public ref float MarkerSize => ref Unsafe.AsRef<float>(&NativePtr->MarkerSize);
-        public ref float MarkerWeight => ref Unsafe.AsRef<float>(&NativePtr->MarkerWeight);
-        public ref float FillAlpha => ref Unsafe.AsRef<float>(&NativePtr->FillAlpha);
-        public ref float ErrorBarSize => ref Unsafe.AsRef<float>(&NativePtr->ErrorBarSize);
-        public ref float ErrorBarWeight => ref Unsafe.AsRef<float>(&NativePtr->ErrorBarWeight);
-        public ref float DigitalBitHeight => ref Unsafe.AsRef<float>(&NativePtr->DigitalBitHeight);
-        public ref float DigitalBitGap => ref Unsafe.AsRef<float>(&NativePtr->DigitalBitGap);
+        public ref Vector2 PlotDefaultSize => ref Unsafe.AsRef<Vector2>(&NativePtr->PlotDefaultSize);
+        public ref Vector2 PlotMinSize => ref Unsafe.AsRef<Vector2>(&NativePtr->PlotMinSize);
         public ref float PlotBorderSize => ref Unsafe.AsRef<float>(&NativePtr->PlotBorderSize);
         public ref float MinorAlpha => ref Unsafe.AsRef<float>(&NativePtr->MinorAlpha);
         public ref Vector2 MajorTickLen => ref Unsafe.AsRef<Vector2>(&NativePtr->MajorTickLen);
@@ -94,9 +75,9 @@ namespace ImPlotNET
         public ref Vector2 MousePosPadding => ref Unsafe.AsRef<Vector2>(&NativePtr->MousePosPadding);
         public ref Vector2 AnnotationPadding => ref Unsafe.AsRef<Vector2>(&NativePtr->AnnotationPadding);
         public ref Vector2 FitPadding => ref Unsafe.AsRef<Vector2>(&NativePtr->FitPadding);
-        public ref Vector2 PlotDefaultSize => ref Unsafe.AsRef<Vector2>(&NativePtr->PlotDefaultSize);
-        public ref Vector2 PlotMinSize => ref Unsafe.AsRef<Vector2>(&NativePtr->PlotMinSize);
-        public RangeAccessor<Vector4> Colors => new RangeAccessor<Vector4>(&NativePtr->Colors_0, 21);
+        public ref float DigitalPadding => ref Unsafe.AsRef<float>(&NativePtr->DigitalPadding);
+        public ref float DigitalSpacing => ref Unsafe.AsRef<float>(&NativePtr->DigitalSpacing);
+        public RangeAccessor<Vector4> Colors => new RangeAccessor<Vector4>(&NativePtr->Colors_0, 16);
         public ref ImPlotColormap Colormap => ref Unsafe.AsRef<ImPlotColormap>(&NativePtr->Colormap);
         public ref bool UseLocalTime => ref Unsafe.AsRef<bool>(&NativePtr->UseLocalTime);
         public ref bool UseISO8601 => ref Unsafe.AsRef<bool>(&NativePtr->UseISO8601);

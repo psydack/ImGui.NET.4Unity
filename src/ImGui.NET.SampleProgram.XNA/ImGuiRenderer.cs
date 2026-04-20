@@ -72,7 +72,11 @@ namespace ImGuiNET.SampleProgram.XNA
         {
             // Get font texture from ImGui
             var io = ImGui.GetIO();
-            io.Fonts.GetTexDataAsRGBA32(out byte* pixelData, out int width, out int height, out int bytesPerPixel);
+            ImTextureDataPtr texData = io.Fonts.TexData;
+            byte* pixelData = (byte*)texData.GetPixels();
+            int width = texData.Width;
+            int height = texData.Height;
+            int bytesPerPixel = texData.BytesPerPixel;
 
             // Copy the data to a managed array
             var pixels = new byte[width * height * bytesPerPixel];
@@ -89,7 +93,7 @@ namespace ImGuiNET.SampleProgram.XNA
             _fontTextureId = BindTexture(tex2d);
 
             // Let ImGui know where to find the texture
-            io.Fonts.SetTexID(_fontTextureId.Value);
+            texData.SetTexID(_fontTextureId.Value);
             io.Fonts.ClearTexData(); // Clears CPU side texture data
         }
 
@@ -395,9 +399,10 @@ namespace ImGuiNET.SampleProgram.XNA
                         continue;
                     }
 
-                    if (!_loadedTextures.ContainsKey(drawCmd.TextureId))
+                    IntPtr textureId = drawCmd.GetTexID();
+                    if (!_loadedTextures.ContainsKey(textureId))
                     {
-                        throw new InvalidOperationException($"Could not find a texture with id '{drawCmd.TextureId}', please check your bindings");
+                        throw new InvalidOperationException($"Could not find a texture with id '{textureId}', please check your bindings");
                     }
 
                     _graphicsDevice.ScissorRectangle = new Rectangle(
@@ -407,7 +412,7 @@ namespace ImGuiNET.SampleProgram.XNA
                         (int)(drawCmd.ClipRect.W - drawCmd.ClipRect.Y)
                     );
 
-                    var effect = UpdateEffect(_loadedTextures[drawCmd.TextureId]);
+                    var effect = UpdateEffect(_loadedTextures[textureId]);
 
                     foreach (var pass in effect.CurrentTechnique.Passes)
                     {

@@ -248,11 +248,13 @@ namespace ImGuiNET
         {
             ImGuiIOPtr io = ImGui.GetIO();
             // Build
-            IntPtr pixels;
-            int width, height, bytesPerPixel;
-            io.Fonts.GetTexDataAsRGBA32(out pixels, out width, out height, out bytesPerPixel);
+            ImTextureDataPtr texData = io.Fonts.TexData;
+            IntPtr pixels = texData.GetPixels();
+            int width = texData.Width;
+            int height = texData.Height;
+            int bytesPerPixel = texData.BytesPerPixel;
             // Store our identifier
-            io.Fonts.SetTexID(_fontAtlasID);
+            texData.SetTexID(_fontAtlasID);
 
             _fontTexture = gd.ResourceFactory.CreateTexture(TextureDescription.Texture2D(
                 (uint)width,
@@ -491,15 +493,16 @@ namespace ImGuiNET
                     }
                     else
                     {
-                        if (pcmd.TextureId != IntPtr.Zero)
+                        IntPtr textureId = pcmd.GetTexID();
+                        if (textureId != IntPtr.Zero)
                         {
-                            if (pcmd.TextureId == _fontAtlasID)
+                            if (textureId == _fontAtlasID)
                             {
                                 cl.SetGraphicsResourceSet(1, _fontTextureResourceSet);
                             }
                             else
                             {
-                                cl.SetGraphicsResourceSet(1, GetImageResourceSet(pcmd.TextureId));
+                                cl.SetGraphicsResourceSet(1, GetImageResourceSet(textureId));
                             }
                         }
 
