@@ -2,8 +2,12 @@
 using System.Diagnostics;
 using System.Linq;
 using System.Numerics;
+using CimCTENET;
 using ImGuizmoNET;
+using ImGuizmoQuatNET;
 using imnodesNET;
+using ImNodesRNET;
+using ImPlot3DNET;
 using ImPlotNET;
 using System.Runtime.CompilerServices;
 using TestDotNetStandardLib;
@@ -32,20 +36,31 @@ namespace ImGuiNET
         private static bool _showAnotherWindow = false;
         private static bool _showMemoryEditor = false;
         private static bool _showImPlotWindow = true;
+        private static bool _showImPlot3DWindow = true;
         private static bool _showImGuizmoWindow = true;
+        private static bool _showImGuizmoQuatWindow = true;
         private static bool _showImNodesWindow = true;
+        private static bool _showImNodesRWindow = true;
+        private static bool _showCimCTEWindow = true;
 
         // ImPlot state
         private static readonly float[] _sinData = Enumerable.Range(0, 100).Select(i => (float)Math.Sin(i * 0.1)).ToArray();
+        private static readonly float[] _plot3DX = Enumerable.Range(0, 64).Select(i => i * 0.1f).ToArray();
+        private static readonly float[] _plot3DY = Enumerable.Range(0, 64).Select(i => (float)Math.Sin(i * 0.1f)).ToArray();
+        private static readonly float[] _plot3DZ = Enumerable.Range(0, 64).Select(i => (float)Math.Cos(i * 0.1f)).ToArray();
 
         // ImGuizmo state
         private static float[] _gizmoView = new float[16];
         private static float[] _gizmoProjection = new float[16];
         private static float[] _gizmoMatrix = new float[16];
+        private static Vector4 _quatGizmo = new Vector4(0, 0, 0, 1);
 
         // ImNodes state
         private static int _imNodesLink0Start = 1;
         private static int _imNodesLink0End = 2;
+        private static IntPtr _imNodesRContext;
+        private static Vector2 _imNodesRNodePos = new Vector2(30, 30);
+        private static bool _imNodesRSelected = false;
         private static byte[] _memoryEditorData;
         private static uint s_tab_bar_flags = (uint)ImGuiTabBarFlags.Reorderable;
         static bool[] s_opened = { true, true, true, true }; // Persistent user state
@@ -101,9 +116,16 @@ namespace ImGuiNET
             IntPtr imGuiContext = ImGui.GetCurrentContext();
             ImPlot.CreateContext();
             ImPlot.SetImGuiContext(imGuiContext);
+            ImPlot3D.SetImGuiContext(imGuiContext);
+            ImPlot3D.CreateContext();
             imnodes.CreateContext();
             imnodes.SetImGuiContext(imGuiContext);
+            ImNodesR.SetImGuiContext(imGuiContext);
+            _imNodesRContext = ImNodesR.CreateContext();
+            ImNodesR.SetContext(_imNodesRContext);
             ImGuizmo.SetImGuiContext(imGuiContext);
+            ImGuizmoQuat.SetImGuiContext(imGuiContext);
+            CimCTE.SetImGuiContext(imGuiContext);
             InitGizmoMatrices();
 
             Random random = new Random();
@@ -138,6 +160,8 @@ namespace ImGuiNET
             _gd.Dispose();
 
             imnodes.DestroyContext();
+            ImNodesR.FreeContext(_imNodesRContext);
+            ImPlot3D.DestroyContext();
             ImPlot.DestroyContext();
         }
 
@@ -161,8 +185,12 @@ namespace ImGuiNET
                 ImGui.Checkbox("Another Window", ref _showAnotherWindow);
                 ImGui.Checkbox("Memory Editor", ref _showMemoryEditor);
                 ImGui.Checkbox("ImPlot Demo", ref _showImPlotWindow);
+                ImGui.Checkbox("ImPlot3D Demo", ref _showImPlot3DWindow);
                 ImGui.Checkbox("ImGuizmo Demo", ref _showImGuizmoWindow);
+                ImGui.Checkbox("ImGuizmoQuat Demo", ref _showImGuizmoQuatWindow);
                 ImGui.Checkbox("ImNodes Demo", ref _showImNodesWindow);
+                ImGui.Checkbox("ImNodesR Demo", ref _showImNodesRWindow);
+                ImGui.Checkbox("cimCTE Smoke", ref _showCimCTEWindow);
                 if (ImGui.Button("Button"))                                         // Buttons return true when clicked (NB: most widgets return true when edited/activated)
                     _counter++;
                 ImGui.SameLine(0, -1);
@@ -275,6 +303,18 @@ namespace ImGuiNET
                 ImGui.End();
             }
 
+            if (_showImPlot3DWindow)
+            {
+                ImGui.Begin("ImPlot3D Demo", ref _showImPlot3DWindow);
+                if (ImPlot3D.BeginPlot("3D Helix"))
+                {
+                    ImPlot3D.SetupAxes("x", "sin(x)", "cos(x)");
+                    ImPlot3D.PlotLine("helix", ref _plot3DX[0], ref _plot3DY[0], ref _plot3DZ[0], _plot3DX.Length);
+                    ImPlot3D.EndPlot();
+                }
+                ImGui.End();
+            }
+
             if (_showImGuizmoWindow)
             {
                 ImGui.Begin("ImGuizmo Demo", ref _showImGuizmoWindow);
@@ -284,6 +324,14 @@ namespace ImGuiNET
                 ImGuizmo.SetRect(pos.X, pos.Y, size.X, size.Y);
                 ImGuizmo.Manipulate(ref _gizmoView[0], ref _gizmoProjection[0], OPERATION.TRANSLATE, MODE.LOCAL, ref _gizmoMatrix[0]);
                 ImGuizmo.DrawGrid(ref _gizmoView[0], ref _gizmoProjection[0], ref _gizmoMatrix[0], 10f);
+                ImGui.End();
+            }
+
+            if (_showImGuizmoQuatWindow)
+            {
+                ImGui.Begin("ImGuizmoQuat Demo", ref _showImGuizmoQuatWindow);
+                ImGuizmoQuat.gizmo3D("Quaternion", ref _quatGizmo);
+                ImGui.Text($"quat = {_quatGizmo}");
                 ImGui.End();
             }
 
@@ -312,6 +360,28 @@ namespace ImGuiNET
 
                 imnodes.Link(0, _imNodesLink0Start, _imNodesLink0End);
                 imnodes.EndNodeEditor();
+                ImGui.End();
+            }
+
+            if (_showImNodesRWindow)
+            {
+                ImGui.Begin("ImNodesR Demo", ref _showImNodesRWindow);
+                ImNodesR.SetContext(_imNodesRContext);
+                ImNodesR.BeginCanvas();
+                if (ImNodesR.BeginNode(new IntPtr(1), "Node R", ref _imNodesRNodePos, ref _imNodesRSelected))
+                {
+                    ImGui.TextUnformatted("cimnodes_r smoke node");
+                    ImNodesR.EndNode();
+                }
+                ImNodesR.EndCanvas();
+                ImGui.End();
+            }
+
+            if (_showCimCTEWindow)
+            {
+                ImGui.Begin("cimCTE Smoke", ref _showCimCTEWindow);
+                bool isWord = CimCTENative.CodePoint_isWord('A') != 0;
+                ImGui.Text($"CodePoint.isWord('A') = {isWord}");
                 ImGui.End();
             }
 

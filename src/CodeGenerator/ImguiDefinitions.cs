@@ -50,7 +50,7 @@ namespace CodeGenerator
             }
 
             Variants = new Dictionary<string, MethodVariant>();
-            foreach (var jt in variantsJson.Children())
+            foreach (var jt in variantsJson?.Children() ?? Enumerable.Empty<JToken>())
             {
                 JProperty jp = (JProperty)jt;
                 ParameterVariant[] methodVariants = jp.Values().Select(jv =>
@@ -315,6 +315,9 @@ namespace CodeGenerator
 
             if (char.IsDigit(ret.First()))
                 ret = "_" + ret;
+
+            if (TypeInfo.IdentifierReplacements.TryGetValue(ret, out string replacement))
+                ret = replacement;
 
             return ret;
         }
