@@ -62,8 +62,7 @@ jobs:
     - name: Download native deps
       shell: bash
       run: |
-        TAG="${GITHUB_REF#refs/tags/}"
-        ./download-native-deps.sh "$TAG" || true
+        ./download-native-deps.sh
 
     - name: Build Release
       run: dotnet build -c Release src

@@ -1,82 +1,122 @@
 #!/usr/bin/env bash
+set -euo pipefail
 
-if [ $# -eq 0 ]; then
-    echo "Missing first argument. Please provide the tag to download."
-    exit 1
-fi
-
-TAG=$1
+REPOSITORY="${REPOSITORY:-https://github.com/psydack/ImGui.NET-nativebuild}"
+TAG="${1:-}"
 
 SCRIPT_ROOT=$( cd -- "$( dirname -- "${BASH_SOURCE[0]}" )" &> /dev/null && pwd )
 
-echo "Script is located in: $SCRIPT_ROOT"
-echo "Using Tag: $TAG"
+if [ -n "$TAG" ]; then
+    DOWNLOAD_BASE="$REPOSITORY/releases/download/$TAG"
+    echo "Downloading native binaries from GitHub Release tag '$TAG'..."
+else
+    DOWNLOAD_BASE="$REPOSITORY/releases/latest/download"
+    echo "Downloading native binaries from the latest GitHub Release..."
+fi
 
-echo -n "Downloading windows x86 cimgui: "
-curl -sfLo "$SCRIPT_ROOT/deps/cimgui/win-x86/cimgui.dll" "https://github.com/psydack/imgui.net-nativebuild/releases/download/$TAG/cimgui.win-x86.dll"
-echo ""
+LIBS=(
+    "cimgui"
+    "cimplot"
+    "cimplot3d"
+    "cimnodes"
+    "cimnodes_r"
+    "cimguizmo"
+    "cimguizmo_quat"
+    "cimCTE"
+)
 
-echo -n "Downloading windows x64 cimgui: "
-curl -sfLo "$SCRIPT_ROOT/deps/cimgui/win-x64/cimgui.dll" "https://github.com/psydack/imgui.net-nativebuild/releases/download/$TAG/cimgui.win-x64.dll"
-echo ""
+PLATFORM_SOURCES=(
+    "win-x86"
+    "win-x64"
+    "win-arm64"
+    "linux-x64"
+    "macos-universal"
+)
 
-echo -n "Downloading windows arm64 cimgui: "
-curl -sfLo "$SCRIPT_ROOT/deps/cimgui/win-arm64/cimgui.dll" "https://github.com/psydack/imgui.net-nativebuild/releases/download/$TAG/cimgui.win-arm64.dll"
-echo ""
+PLATFORM_DIRS=(
+    "win-x86"
+    "win-x64"
+    "win-arm64"
+    "linux-x64"
+    "osx"
+)
 
-echo -n "Downloading linux x64 cimgui: "
-curl -sfLo "$SCRIPT_ROOT/deps/cimgui/linux-x64/cimgui.so" "https://github.com/psydack/imgui.net-nativebuild/releases/download/$TAG/cimgui.so"
-echo ""
+PLATFORM_EXTENSIONS=(
+    "dll"
+    "dll"
+    "dll"
+    "so"
+    "dylib"
+)
 
-echo -n "Downloading osx universal (x86_64 and arm64) cimgui: "
-curl -sfLo "$SCRIPT_ROOT/deps/cimgui/osx/cimgui.dylib" "https://github.com/psydack/imgui.net-nativebuild/releases/download/$TAG/cimgui.dylib"
-echo ""
+TEMP_ROOT=$(mktemp -d)
+trap 'rm -rf "$TEMP_ROOT"' EXIT
 
-echo -n "Downloading definitions json file: "
-curl -sfLo "$SCRIPT_ROOT/src/CodeGenerator/definitions/cimgui/definitions.json" "https://github.com/psydack/imgui.net-nativebuild/releases/download/$TAG/definitions.json"
-echo ""
+copy_if_exists() {
+    local source=$1
+    local destination=$2
 
-echo -n "Downloading structs and enums json file: "
-curl -sfLo "$SCRIPT_ROOT/src/CodeGenerator/definitions/cimgui/structs_and_enums.json" "https://github.com/psydack/imgui.net-nativebuild/releases/download/$TAG/structs_and_enums.json"
-echo ""
+    if [ -f "$source" ]; then
+        mkdir -p "$(dirname "$destination")"
+        cp "$source" "$destination"
+        return 0
+    fi
 
-# Optional extras — errors are ignored
-mkdir -p "$SCRIPT_ROOT/deps/cimplot/win-x64" "$SCRIPT_ROOT/deps/cimplot/linux-x64" "$SCRIPT_ROOT/deps/cimplot/osx"
-mkdir -p "$SCRIPT_ROOT/deps/cimnodes/win-x64" "$SCRIPT_ROOT/deps/cimnodes/linux-x64" "$SCRIPT_ROOT/deps/cimnodes/osx"
-mkdir -p "$SCRIPT_ROOT/deps/cimguizmo/win-x64" "$SCRIPT_ROOT/deps/cimguizmo/linux-x64" "$SCRIPT_ROOT/deps/cimguizmo/osx"
+    return 1
+}
 
-echo -n "Downloading windows x64 cimplot (optional): "
-curl -sfLo "$SCRIPT_ROOT/deps/cimplot/win-x64/cimplot.dll" "https://github.com/psydack/imgui.net-nativebuild/releases/download/$TAG/cimplot.win-x64.dll" || true
-echo ""
+get_extracted_library_root() {
+    local extract_root=$1
+    local lib=$2
+    local expected_root="$extract_root/$lib"
 
-echo -n "Downloading linux x64 cimplot (optional): "
-curl -sfLo "$SCRIPT_ROOT/deps/cimplot/linux-x64/cimplot.so" "https://github.com/psydack/imgui.net-nativebuild/releases/download/$TAG/cimplot.so" || true
-echo ""
+    if [ -d "$expected_root" ]; then
+        echo "$expected_root"
+        return
+    fi
 
-echo -n "Downloading osx cimplot (optional): "
-curl -sfLo "$SCRIPT_ROOT/deps/cimplot/osx/cimplot.dylib" "https://github.com/psydack/imgui.net-nativebuild/releases/download/$TAG/cimplot.dylib" || true
-echo ""
+    local first_directory
+    first_directory=$(find "$extract_root" -mindepth 1 -maxdepth 1 -type d | head -n 1)
+    if [ -n "$first_directory" ]; then
+        echo "$first_directory"
+        return
+    fi
 
-echo -n "Downloading windows x64 cimnodes (optional): "
-curl -sfLo "$SCRIPT_ROOT/deps/cimnodes/win-x64/cimnodes.dll" "https://github.com/psydack/imgui.net-nativebuild/releases/download/$TAG/cimnodes.win-x64.dll" || true
-echo ""
+    echo "$extract_root"
+}
 
-echo -n "Downloading linux x64 cimnodes (optional): "
-curl -sfLo "$SCRIPT_ROOT/deps/cimnodes/linux-x64/cimnodes.so" "https://github.com/psydack/imgui.net-nativebuild/releases/download/$TAG/cimnodes.so" || true
-echo ""
+for lib in "${LIBS[@]}"; do
+    archive_path="$TEMP_ROOT/$lib.zip"
+    extract_path="$TEMP_ROOT/$lib"
+    lib_deps_path="$SCRIPT_ROOT/deps/$lib"
+    definition_path="$SCRIPT_ROOT/src/CodeGenerator/definitions/$lib"
 
-echo -n "Downloading osx cimnodes (optional): "
-curl -sfLo "$SCRIPT_ROOT/deps/cimnodes/osx/cimnodes.dylib" "https://github.com/psydack/imgui.net-nativebuild/releases/download/$TAG/cimnodes.dylib" || true
-echo ""
+    echo "- downloading $lib.zip"
+    curl -fL "$DOWNLOAD_BASE/$lib.zip" -o "$archive_path"
 
-echo -n "Downloading windows x64 cimguizmo (optional): "
-curl -sfLo "$SCRIPT_ROOT/deps/cimguizmo/win-x64/cimguizmo.dll" "https://github.com/psydack/imgui.net-nativebuild/releases/download/$TAG/cimguizmo.win-x64.dll" || true
-echo ""
+    rm -rf "$lib_deps_path"
+    mkdir -p "$extract_path"
+    unzip -q "$archive_path" -d "$extract_path"
 
-echo -n "Downloading linux x64 cimguizmo (optional): "
-curl -sfLo "$SCRIPT_ROOT/deps/cimguizmo/linux-x64/cimguizmo.so" "https://github.com/psydack/imgui.net-nativebuild/releases/download/$TAG/cimguizmo.so" || true
-echo ""
+    lib_root=$(get_extracted_library_root "$extract_path" "$lib")
 
-echo -n "Downloading osx cimguizmo (optional): "
-curl -sfLo "$SCRIPT_ROOT/deps/cimguizmo/osx/cimguizmo.dylib" "https://github.com/psydack/imgui.net-nativebuild/releases/download/$TAG/cimguizmo.dylib" || true
-echo ""
+    for index in "${!PLATFORM_SOURCES[@]}"; do
+        source_file="$lib_root/$lib.${PLATFORM_SOURCES[$index]}.${PLATFORM_EXTENSIONS[$index]}"
+        destination_file="$lib_deps_path/${PLATFORM_DIRS[$index]}/$lib.${PLATFORM_EXTENSIONS[$index]}"
+
+        if copy_if_exists "$source_file" "$destination_file"; then
+            echo "  copied ${PLATFORM_DIRS[$index]}/$lib.${PLATFORM_EXTENSIONS[$index]}"
+        fi
+    done
+
+    for json_name in "definitions.json" "structs_and_enums.json" "variants.json"; do
+        json_source="$lib_root/$json_name"
+        json_destination="$definition_path/$json_name"
+
+        if copy_if_exists "$json_source" "$json_destination"; then
+            echo "  copied definitions/$lib/$json_name"
+        fi
+    done
+done
+
+echo "Native dependency download complete."

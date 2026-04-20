@@ -1,137 +1,118 @@
 param (
-    [Parameter(Mandatory=$false)][string]$repository,
-    [Parameter(Mandatory=$true)][string]$tag
+    [Parameter(Mandatory=$false)][string]$tag,
+    [Parameter(Mandatory=$false)][string]$repository = "https://github.com/psydack/ImGui.NET-nativebuild"
 )
 
-if( -not $repository )
-{
-    $repository="https://github.com/psydack/imgui.net-nativebuild"
+$ErrorActionPreference = "Stop"
+
+if ($tag) {
+    $downloadBase = "$repository/releases/download/$tag"
+    Write-Host "Downloading native binaries from GitHub Release tag '$tag'..."
+} else {
+    $downloadBase = "$repository/releases/latest/download"
+    Write-Host "Downloading native binaries from the latest GitHub Release..."
 }
 
-Write-Host Downloading native binaries from GitHub Releases...
-
-if (Test-Path $PSScriptRoot\deps\cimgui\)
-{
-    Remove-Item $PSScriptRoot\deps\cimgui\ -Force -Recurse | Out-Null
-}
-New-Item -ItemType Directory -Force -Path $PSScriptRoot\deps\cimgui\linux-x64 | Out-Null
-New-Item -ItemType Directory -Force -Path $PSScriptRoot\deps\cimgui\osx | Out-Null
-New-Item -ItemType Directory -Force -Path $PSScriptRoot\deps\cimgui\win-x86 | Out-Null
-New-Item -ItemType Directory -Force -Path $PSScriptRoot\deps\cimgui\win-x64 | Out-Null
-New-Item -ItemType Directory -Force -Path $PSScriptRoot\deps\cimgui\win-arm64 | Out-Null
-
-[Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
-
-$client = New-Object System.Net.WebClient
-$client.DownloadFile(
-    "$repository/releases/download/$tag/cimgui.win-x86.dll",
-    "$PSScriptRoot/deps/cimgui/win-x86/cimgui.dll")
-if( -not $? )
-{
-    $msg = $Error[0].Exception.Message
-    Write-Error "Couldn't download x86 cimgui.dll. This most likely indicates the Windows native build failed."
-    exit
-}
-
-Write-Host "- cimgui.dll (x86)"
-
-$client.DownloadFile(
-    "$repository/releases/download/$tag/cimgui.win-x64.dll",
-    "$PSScriptRoot/deps/cimgui/win-x64/cimgui.dll")
-if( -not $? )
-{
-    $msg = $Error[0].Exception.Message
-    Write-Error "Couldn't download x64 cimgui.dll. This most likely indicates the Windows native build failed."
-    exit
-}
-
-Write-Host "- cimgui.dll (x64)"
-
-$client.DownloadFile(
-    "$repository/releases/download/$tag/cimgui.win-arm64.dll",
-    "$PSScriptRoot/deps/cimgui/win-arm64/cimgui.dll")
-if( -not $? )
-{
-    $msg = $Error[0].Exception.Message
-    Write-Error "Couldn't download arm64 cimgui.dll. This most likely indicates the Windows native build failed."
-    exit
-}
-
-Write-Host "- cimgui.dll (arm64)"
-
-$client.DownloadFile(
-    "$repository/releases/download/$tag/cimgui.so",
-    "$PSScriptRoot/deps/cimgui/linux-x64/cimgui.so")
-if( -not $? )
-{
-    $msg = $Error[0].Exception.Message
-    Write-Error "Couldn't download cimgui.so. This most likely indicates the Linux native build failed."
-    exit
-}
-
-Write-Host - cimgui.so
-
-$client.DownloadFile(
-    "$repository/releases/download/$tag/cimgui.dylib",
-    "$PSScriptRoot/deps/cimgui/osx/cimgui.dylib")
-if( -not $? )
-{
-    $msg = $Error[0].Exception.Message
-    Write-Error "Couldn't download cimgui.dylib. This most likely indicates the macOS native build failed."
-    exit
-}
-
-Write-Host "- cimgui.dylib"
-
-$client.DownloadFile(
-    "$repository/releases/download/$tag/definitions.json",
-    "$PSScriptRoot/src/CodeGenerator/definitions/cimgui/definitions.json")
-if( -not $? )
-{
-    $msg = $Error[0].Exception.Message
-    Write-Error "Couldn't download definitions.json."
-    exit
-}
-
-Write-Host - definitions.json
-
-$client.DownloadFile(
-    "$repository/releases/download/$tag/structs_and_enums.json",
-    "$PSScriptRoot/src/CodeGenerator/definitions/cimgui/structs_and_enums.json")
-if( -not $? )
-{
-    $msg = $Error[0].Exception.Message
-    Write-Error "Couldn't download structs_and_enums.json."
-    exit
-}
-
-Write-Host - structs_and_enums.json
-
-# Optional extras — errors are silently ignored
-$extras = @(
-    @{ lib = "cimplot";   winFile = "cimplot.win-x64.dll";   linuxFile = "cimplot.so";   osxFile = "cimplot.dylib" },
-    @{ lib = "cimnodes";  winFile = "cimnodes.win-x64.dll";  linuxFile = "cimnodes.so";  osxFile = "cimnodes.dylib" },
-    @{ lib = "cimguizmo"; winFile = "cimguizmo.win-x64.dll"; linuxFile = "cimguizmo.so"; osxFile = "cimguizmo.dylib" }
+$libs = @(
+    "cimgui",
+    "cimplot",
+    "cimplot3d",
+    "cimnodes",
+    "cimnodes_r",
+    "cimguizmo",
+    "cimguizmo_quat",
+    "cimCTE"
 )
 
-foreach ($extra in $extras) {
-    $lib = $extra.lib
-    New-Item -ItemType Directory -Force -Path "$PSScriptRoot\deps\$lib\win-x64"   | Out-Null
-    New-Item -ItemType Directory -Force -Path "$PSScriptRoot\deps\$lib\linux-x64" | Out-Null
-    New-Item -ItemType Directory -Force -Path "$PSScriptRoot\deps\$lib\osx"       | Out-Null
+$platforms = @(
+    @{ Source = "win-x86";          Directory = "win-x86";    Extension = "dll" },
+    @{ Source = "win-x64";          Directory = "win-x64";    Extension = "dll" },
+    @{ Source = "win-arm64";        Directory = "win-arm64";  Extension = "dll" },
+    @{ Source = "linux-x64";        Directory = "linux-x64";  Extension = "so" },
+    @{ Source = "macos-universal";  Directory = "osx";        Extension = "dylib" }
+)
 
-    try {
-        $client.DownloadFile("$repository/releases/download/$tag/$($extra.winFile)",   "$PSScriptRoot/deps/$lib/win-x64/$lib.dll")
-        Write-Host "- $lib.dll (win-x64)"
-    } catch { Write-Host "- $lib.dll (win-x64) skipped: $_" }
+$definitionsRoot = Join-Path $PSScriptRoot "src\CodeGenerator\definitions"
+$depsRoot = Join-Path $PSScriptRoot "deps"
+$tempRoot = Join-Path ([System.IO.Path]::GetTempPath()) ("imgui-net-nativebuild-" + [System.Guid]::NewGuid().ToString("N"))
 
-    try {
-        $client.DownloadFile("$repository/releases/download/$tag/$($extra.linuxFile)", "$PSScriptRoot/deps/$lib/linux-x64/$lib.so")
-        Write-Host "- $lib.so (linux-x64)"
-    } catch { Write-Host "- $lib.so (linux-x64) skipped: $_" }
+function Copy-IfExists {
+    param (
+        [Parameter(Mandatory=$true)][string]$Source,
+        [Parameter(Mandatory=$true)][string]$Destination
+    )
 
-    try {
-        $client.DownloadFile("$repository/releases/download/$tag/$($extra.osxFile)",   "$PSScriptRoot/deps/$lib/osx/$lib.dylib")
-        Write-Host "- $lib.dylib (osx)"
-    } catch { Write-Host "- $lib.dylib (osx) skipped: $_" }
+    if (Test-Path -LiteralPath $Source) {
+        New-Item -ItemType Directory -Force -Path (Split-Path -Parent $Destination) | Out-Null
+        Copy-Item -LiteralPath $Source -Destination $Destination -Force
+        return $true
+    }
+
+    return $false
 }
+
+function Get-ExtractedLibraryRoot {
+    param (
+        [Parameter(Mandatory=$true)][string]$ExtractRoot,
+        [Parameter(Mandatory=$true)][string]$LibraryName
+    )
+
+    $expectedRoot = Join-Path $ExtractRoot $LibraryName
+    if (Test-Path -LiteralPath $expectedRoot) {
+        return $expectedRoot
+    }
+
+    $firstDirectory = Get-ChildItem -LiteralPath $ExtractRoot -Directory | Select-Object -First 1
+    if ($firstDirectory) {
+        return $firstDirectory.FullName
+    }
+
+    return $ExtractRoot
+}
+
+try {
+    New-Item -ItemType Directory -Force -Path $tempRoot | Out-Null
+
+    foreach ($lib in $libs) {
+        $archivePath = Join-Path $tempRoot "$lib.zip"
+        $extractPath = Join-Path $tempRoot $lib
+        $libDepsPath = Join-Path $depsRoot $lib
+        $definitionPath = Join-Path $definitionsRoot $lib
+
+        Write-Host "- downloading $lib.zip"
+        Invoke-WebRequest -Uri "$downloadBase/$lib.zip" -OutFile $archivePath
+
+        if (Test-Path -LiteralPath $libDepsPath) {
+            Remove-Item -LiteralPath $libDepsPath -Force -Recurse
+        }
+
+        New-Item -ItemType Directory -Force -Path $extractPath | Out-Null
+        Expand-Archive -LiteralPath $archivePath -DestinationPath $extractPath -Force
+
+        $libRoot = Get-ExtractedLibraryRoot -ExtractRoot $extractPath -LibraryName $lib
+
+        foreach ($platform in $platforms) {
+            $sourceFile = Join-Path $libRoot "$lib.$($platform.Source).$($platform.Extension)"
+            $destinationFile = Join-Path (Join-Path $libDepsPath $platform.Directory) "$lib.$($platform.Extension)"
+
+            if (Copy-IfExists -Source $sourceFile -Destination $destinationFile) {
+                Write-Host "  copied $($platform.Directory)/$lib.$($platform.Extension)"
+            }
+        }
+
+        foreach ($jsonName in @("definitions.json", "structs_and_enums.json", "variants.json")) {
+            $jsonSource = Join-Path $libRoot $jsonName
+            $jsonDestination = Join-Path $definitionPath $jsonName
+
+            if (Copy-IfExists -Source $jsonSource -Destination $jsonDestination) {
+                Write-Host "  copied definitions/$lib/$jsonName"
+            }
+        }
+    }
+} finally {
+    if (Test-Path -LiteralPath $tempRoot) {
+        Remove-Item -LiteralPath $tempRoot -Force -Recurse
+    }
+}
+
+Write-Host "Native dependency download complete."
