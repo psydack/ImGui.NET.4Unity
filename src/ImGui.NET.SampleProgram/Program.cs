@@ -2,6 +2,8 @@
 using System.Diagnostics;
 using System.Linq;
 using System.Numerics;
+using ImGuizmoNET;
+using imnodesNET;
 using ImPlotNET;
 using System.Runtime.CompilerServices;
 using TestDotNetStandardLib;
@@ -29,11 +31,55 @@ namespace ImGuiNET
         private static bool _showImGuiDemoWindow = true;
         private static bool _showAnotherWindow = false;
         private static bool _showMemoryEditor = false;
+        private static bool _showImPlotWindow = true;
+        private static bool _showImGuizmoWindow = true;
+        private static bool _showImNodesWindow = true;
+
+        // ImPlot state
+        private static readonly float[] _sinData = Enumerable.Range(0, 100).Select(i => (float)Math.Sin(i * 0.1)).ToArray();
+
+        // ImGuizmo state
+        private static float[] _gizmoView = new float[16];
+        private static float[] _gizmoProjection = new float[16];
+        private static float[] _gizmoMatrix = new float[16];
+
+        // ImNodes state
+        private static int _imNodesLink0Start = 1;
+        private static int _imNodesLink0End = 2;
         private static byte[] _memoryEditorData;
         private static uint s_tab_bar_flags = (uint)ImGuiTabBarFlags.Reorderable;
         static bool[] s_opened = { true, true, true, true }; // Persistent user state
 
         static void SetThing(out float i, float val) { i = val; }
+
+        private static void InitGizmoMatrices()
+        {
+            // Identity model matrix
+            _gizmoMatrix[0] = 1; _gizmoMatrix[5] = 1; _gizmoMatrix[10] = 1; _gizmoMatrix[15] = 1;
+
+            // Simple lookat view matrix (camera at (2,2,5) looking at origin)
+            var eye = new Vector3(2f, 2f, 5f);
+            var center = Vector3.Zero;
+            var up = Vector3.UnitY;
+            var z = Vector3.Normalize(eye - center);
+            var x = Vector3.Normalize(Vector3.Cross(up, z));
+            var y = Vector3.Cross(z, x);
+            _gizmoView[0]  = x.X; _gizmoView[1]  = y.X; _gizmoView[2]  = z.X; _gizmoView[3]  = 0;
+            _gizmoView[4]  = x.Y; _gizmoView[5]  = y.Y; _gizmoView[6]  = z.Y; _gizmoView[7]  = 0;
+            _gizmoView[8]  = x.Z; _gizmoView[9]  = y.Z; _gizmoView[10] = z.Z; _gizmoView[11] = 0;
+            _gizmoView[12] = -Vector3.Dot(x, eye); _gizmoView[13] = -Vector3.Dot(y, eye); _gizmoView[14] = -Vector3.Dot(z, eye); _gizmoView[15] = 1;
+
+            // Simple perspective projection
+            float fovY = (float)(Math.PI / 4.0);
+            float aspect = 1280f / 720f;
+            float near = 0.1f; float far = 100f;
+            float f = 1f / (float)Math.Tan(fovY / 2f);
+            _gizmoProjection[0]  = f / aspect;
+            _gizmoProjection[5]  = f;
+            _gizmoProjection[10] = (far + near) / (near - far);
+            _gizmoProjection[11] = -1f;
+            _gizmoProjection[14] = (2f * far * near) / (near - far);
+        }
 
         static void Main(string[] args)
         {
@@ -51,6 +97,11 @@ namespace ImGuiNET
             _cl = _gd.ResourceFactory.CreateCommandList();
             _controller = new ImGuiController(_gd, _gd.MainSwapchain.Framebuffer.OutputDescription, _window.Width, _window.Height);
             // _memoryEditor = new MemoryEditor();
+
+            ImPlot.CreateContext();
+            imnodes.Initialize();
+            InitGizmoMatrices();
+
             Random random = new Random();
             _memoryEditorData = Enumerable.Range(0, 1024).Select(i => (byte)random.Next(255)).ToArray();
 
@@ -81,6 +132,9 @@ namespace ImGuiNET
             _controller.Dispose();
             _cl.Dispose();
             _gd.Dispose();
+
+            imnodes.Shutdown();
+            ImPlot.DestroyContext();
         }
 
         private static unsafe void SubmitUI()
@@ -99,9 +153,12 @@ namespace ImGuiNET
 
                 ImGui.Text($"Mouse position: {ImGui.GetMousePos()}");
 
-                ImGui.Checkbox("ImGui Demo Window", ref _showImGuiDemoWindow);                 // Edit bools storing our windows open/close state
+                ImGui.Checkbox("ImGui Demo Window", ref _showImGuiDemoWindow);
                 ImGui.Checkbox("Another Window", ref _showAnotherWindow);
                 ImGui.Checkbox("Memory Editor", ref _showMemoryEditor);
+                ImGui.Checkbox("ImPlot Demo", ref _showImPlotWindow);
+                ImGui.Checkbox("ImGuizmo Demo", ref _showImGuizmoWindow);
+                ImGui.Checkbox("ImNodes Demo", ref _showImNodesWindow);
                 if (ImGui.Button("Button"))                                         // Buttons return true when clicked (NB: most widgets return true when edited/activated)
                     _counter++;
                 ImGui.SameLine(0, -1);
@@ -199,6 +256,59 @@ namespace ImGuiNET
                     ImGui.TreePop();
                 }
                 ImGui.TreePop();
+            }
+
+            if (_showImPlotWindow)
+            {
+                ImGui.Begin("ImPlot Demo", ref _showImPlotWindow);
+                if (ImPlot.BeginPlot("Sin Wave"))
+                {
+                    ImPlot.SetupAxes("x", "y");
+                    float[] data = _sinData;
+                    ImPlot.PlotLine("sin(x)", ref data[0], data.Length);
+                    ImPlot.EndPlot();
+                }
+                ImGui.End();
+            }
+
+            if (_showImGuizmoWindow)
+            {
+                ImGui.Begin("ImGuizmo Demo", ref _showImGuizmoWindow);
+                ImGuizmo.BeginFrame();
+                var pos = ImGui.GetWindowPos();
+                var size = ImGui.GetWindowSize();
+                ImGuizmo.SetRect(pos.X, pos.Y, size.X, size.Y);
+                ImGuizmo.Manipulate(ref _gizmoView[0], ref _gizmoProjection[0], OPERATION.TRANSLATE, MODE.LOCAL, ref _gizmoMatrix[0]);
+                ImGuizmo.DrawGrid(ref _gizmoView[0], ref _gizmoProjection[0], ref _gizmoMatrix[0], 10f);
+                ImGui.End();
+            }
+
+            if (_showImNodesWindow)
+            {
+                ImGui.Begin("ImNodes Demo", ref _showImNodesWindow);
+                imnodes.BeginNodeEditor();
+
+                imnodes.BeginNode(1);
+                imnodes.BeginNodeTitleBar();
+                ImGui.TextUnformatted("Node A");
+                imnodes.EndNodeTitleBar();
+                imnodes.BeginOutputAttribute(_imNodesLink0Start);
+                ImGui.Text("Output");
+                imnodes.EndOutputAttribute();
+                imnodes.EndNode();
+
+                imnodes.BeginNode(2);
+                imnodes.BeginNodeTitleBar();
+                ImGui.TextUnformatted("Node B");
+                imnodes.EndNodeTitleBar();
+                imnodes.BeginInputAttribute(_imNodesLink0End);
+                ImGui.Text("Input");
+                imnodes.EndInputAttribute();
+                imnodes.EndNode();
+
+                imnodes.Link(0, _imNodesLink0Start, _imNodesLink0End);
+                imnodes.EndNodeEditor();
+                ImGui.End();
             }
 
             ImGuiIOPtr io = ImGui.GetIO();

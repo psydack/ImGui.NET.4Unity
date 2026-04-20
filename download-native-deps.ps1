@@ -5,7 +5,7 @@ param (
 
 if( -not $repository )
 {
-    $repository="https://github.com/mellinoe/imgui.net-nativebuild"
+    $repository="https://github.com/psydack/imgui.net-nativebuild"
 }
 
 Write-Host Downloading native binaries from GitHub Releases...
@@ -37,7 +37,7 @@ Write-Host "- cimgui.dll (x86)"
 
 $client.DownloadFile(
     "$repository/releases/download/$tag/cimgui.win-x64.dll",
-    "$PSScriptRoot/deps/cimgui/win-x64/$configuration/cimgui.dll")
+    "$PSScriptRoot/deps/cimgui/win-x64/cimgui.dll")
 if( -not $? )
 {
     $msg = $Error[0].Exception.Message
@@ -49,7 +49,7 @@ Write-Host "- cimgui.dll (x64)"
 
 $client.DownloadFile(
     "$repository/releases/download/$tag/cimgui.win-arm64.dll",
-    "$PSScriptRoot/deps/cimgui/win-arm64/$configuration/cimgui.dll")
+    "$PSScriptRoot/deps/cimgui/win-arm64/cimgui.dll")
 if( -not $? )
 {
     $msg = $Error[0].Exception.Message
@@ -84,7 +84,7 @@ if( -not $? )
 Write-Host "- cimgui.dylib"
 
 $client.DownloadFile(
-    "https://github.com/mellinoe/imgui.net-nativebuild/releases/download/$tag/definitions.json",
+    "$repository/releases/download/$tag/definitions.json",
     "$PSScriptRoot/src/CodeGenerator/definitions/cimgui/definitions.json")
 if( -not $? )
 {
@@ -96,7 +96,7 @@ if( -not $? )
 Write-Host - definitions.json
 
 $client.DownloadFile(
-    "https://github.com/mellinoe/imgui.net-nativebuild/releases/download/$tag/structs_and_enums.json",
+    "$repository/releases/download/$tag/structs_and_enums.json",
     "$PSScriptRoot/src/CodeGenerator/definitions/cimgui/structs_and_enums.json")
 if( -not $? )
 {
@@ -106,3 +106,32 @@ if( -not $? )
 }
 
 Write-Host - structs_and_enums.json
+
+# Optional extras — errors are silently ignored
+$extras = @(
+    @{ lib = "cimplot";   winFile = "cimplot.win-x64.dll";   linuxFile = "cimplot.so";   osxFile = "cimplot.dylib" },
+    @{ lib = "cimnodes";  winFile = "cimnodes.win-x64.dll";  linuxFile = "cimnodes.so";  osxFile = "cimnodes.dylib" },
+    @{ lib = "cimguizmo"; winFile = "cimguizmo.win-x64.dll"; linuxFile = "cimguizmo.so"; osxFile = "cimguizmo.dylib" }
+)
+
+foreach ($extra in $extras) {
+    $lib = $extra.lib
+    New-Item -ItemType Directory -Force -Path "$PSScriptRoot\deps\$lib\win-x64"   | Out-Null
+    New-Item -ItemType Directory -Force -Path "$PSScriptRoot\deps\$lib\linux-x64" | Out-Null
+    New-Item -ItemType Directory -Force -Path "$PSScriptRoot\deps\$lib\osx"       | Out-Null
+
+    try {
+        $client.DownloadFile("$repository/releases/download/$tag/$($extra.winFile)",   "$PSScriptRoot/deps/$lib/win-x64/$lib.dll")
+        Write-Host "- $lib.dll (win-x64)"
+    } catch { Write-Host "- $lib.dll (win-x64) skipped: $_" }
+
+    try {
+        $client.DownloadFile("$repository/releases/download/$tag/$($extra.linuxFile)", "$PSScriptRoot/deps/$lib/linux-x64/$lib.so")
+        Write-Host "- $lib.so (linux-x64)"
+    } catch { Write-Host "- $lib.so (linux-x64) skipped: $_" }
+
+    try {
+        $client.DownloadFile("$repository/releases/download/$tag/$($extra.osxFile)",   "$PSScriptRoot/deps/$lib/osx/$lib.dylib")
+        Write-Host "- $lib.dylib (osx)"
+    } catch { Write-Host "- $lib.dylib (osx) skipped: $_" }
+}

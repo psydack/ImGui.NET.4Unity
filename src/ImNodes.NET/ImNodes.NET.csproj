@@ -23,4 +23,21 @@
   <ItemGroup>
     <ProjectReference Include="..\ImGui.NET\ImGui.NET.csproj" />
   </ItemGroup>
+  <ItemGroup>
+    <Content Condition="Exists('..\..\deps\cimnodes\win-x64\cimnodes.dll')" Include="..\..\deps\cimnodes\win-x64\cimnodes.dll">
+      <PackagePath>runtimes/win-x64/native</PackagePath>
+      <Pack>true</Pack>
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
+    <Content Condition="Exists('..\..\deps\cimnodes\linux-x64\cimnodes.so')" Include="..\..\deps\cimnodes\linux-x64\cimnodes.so">
+      <PackagePath>runtimes/linux-x64/native/libcimnodes.so</PackagePath>
+      <Pack>true</Pack>
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
+    <Content Condition="Exists('..\..\deps\cimnodes\osx\cimnodes.dylib')" Include="..\..\deps\cimnodes\osx\cimnodes.dylib">
+      <PackagePath>runtimes/osx/native/libcimnodes.dylib</PackagePath>
+      <Pack>true</Pack>
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
+  </ItemGroup>
 </Project>
