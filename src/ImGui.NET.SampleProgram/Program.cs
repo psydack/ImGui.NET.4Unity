@@ -98,8 +98,12 @@ namespace ImGuiNET
             _controller = new ImGuiController(_gd, _gd.MainSwapchain.Framebuffer.OutputDescription, _window.Width, _window.Height);
             // _memoryEditor = new MemoryEditor();
 
+            IntPtr imGuiContext = ImGui.GetCurrentContext();
             ImPlot.CreateContext();
+            ImPlot.SetImGuiContext(imGuiContext);
             imnodes.CreateContext();
+            imnodes.SetImGuiContext(imGuiContext);
+            ImGuizmo.SetImGuiContext(imGuiContext);
             InitGizmoMatrices();
 
             Random random = new Random();

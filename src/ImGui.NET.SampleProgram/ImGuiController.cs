@@ -21,21 +21,12 @@ namespace ImGuiNET
         private DeviceBuffer _vertexBuffer;
         private DeviceBuffer _indexBuffer;
         private DeviceBuffer _projMatrixBuffer;
-        private Texture _fontTexture;
-        private TextureView _fontTextureView;
         private Shader _vertexShader;
         private Shader _fragmentShader;
         private ResourceLayout _layout;
         private ResourceLayout _textureLayout;
         private Pipeline _pipeline;
         private ResourceSet _mainResourceSet;
-        private ResourceSet _fontTextureResourceSet;
-
-        private IntPtr _fontAtlasID = (IntPtr)1;
-        private bool _controlDown;
-        private bool _shiftDown;
-        private bool _altDown;
-        private bool _winKeyDown;
 
         private int _windowWidth;
         private int _windowHeight;
@@ -61,7 +52,8 @@ namespace ImGuiNET
 
             ImGui.CreateContext();
             var io = ImGui.GetIO();
-            io.BackendFlags |= ImGuiBackendFlags.RendererHasVtxOffset;
+            io.BackendFlags |= ImGuiBackendFlags.RendererHasVtxOffset |
+                ImGuiBackendFlags.RendererHasTextures;
             io.ConfigFlags |= ImGuiConfigFlags.NavEnableKeyboard |
                 ImGuiConfigFlags.DockingEnable;
             io.Fonts.Flags |= ImFontAtlasFlags.NoBakedLines;
@@ -91,7 +83,6 @@ namespace ImGuiNET
             _vertexBuffer.Name = "ImGui.NET Vertex Buffer";
             _indexBuffer = factory.CreateBuffer(new BufferDescription(2000, BufferUsage.IndexBuffer | BufferUsage.Dynamic));
             _indexBuffer.Name = "ImGui.NET Index Buffer";
-            RecreateFontDeviceTexture(gd);
 
             _projMatrixBuffer = factory.CreateBuffer(new BufferDescription(64, BufferUsage.UniformBuffer | BufferUsage.Dynamic));
             _projMatrixBuffer.Name = "ImGui.NET Projection Buffer";
@@ -129,8 +120,6 @@ namespace ImGuiNET
             _mainResourceSet = factory.CreateResourceSet(new ResourceSetDescription(_layout,
                 _projMatrixBuffer,
                 gd.PointSampler));
-
-            _fontTextureResourceSet = factory.CreateResourceSet(new ResourceSetDescription(_textureLayout, _fontTextureView));
         }
 
         /// <summary>
@@ -141,12 +130,11 @@ namespace ImGuiNET
         {
             if (!_setsByView.TryGetValue(textureView, out ResourceSetInfo rsi))
             {
-                ResourceSet resourceSet = factory.CreateResourceSet(new ResourceSetDescription(_textureLayout, textureView));
-                rsi = new ResourceSetInfo(GetNextImGuiBindingID(), resourceSet);
+                rsi = CreateResourceSetInfo(factory, textureView, ownsTextureResources: false);
 
                 _setsByView.Add(textureView, rsi);
                 _viewsById.Add(rsi.ImGuiBinding, rsi);
-                _ownedResources.Add(resourceSet);
+                _ownedResources.Add(rsi.ResourceSet);
             }
 
             return rsi.ImGuiBinding;
@@ -195,10 +183,29 @@ namespace ImGuiNET
             }
 
             _ownedResources.Clear();
+
+            List<IntPtr> externalResourceIds = new List<IntPtr>();
+            foreach (KeyValuePair<IntPtr, ResourceSetInfo> view in _viewsById)
+            {
+                if (!view.Value.OwnsTextureResources)
+                {
+                    externalResourceIds.Add(view.Key);
+                }
+            }
+
+            foreach (IntPtr id in externalResourceIds)
+            {
+                _viewsById.Remove(id);
+            }
+
             _setsByView.Clear();
-            _viewsById.Clear();
             _autoViewsByTexture.Clear();
-            _lastAssignedID = 100;
+        }
+
+        private ResourceSetInfo CreateResourceSetInfo(ResourceFactory factory, TextureView textureView, bool ownsTextureResources)
+        {
+            ResourceSet resourceSet = factory.CreateResourceSet(new ResourceSetDescription(_textureLayout, textureView));
+            return new ResourceSetInfo(GetNextImGuiBindingID(), null, textureView, resourceSet, ownsTextureResources);
         }
 
         private byte[] LoadEmbeddedShaderCode(ResourceFactory factory, string name, ShaderStages stage)
@@ -239,46 +246,6 @@ namespace ImGuiNET
                 s.Read(ret, 0, (int)s.Length);
                 return ret;
             }
-        }
-
-        /// <summary>
-        /// Recreates the device texture used to render text.
-        /// </summary>
-        public void RecreateFontDeviceTexture(GraphicsDevice gd)
-        {
-            ImGuiIOPtr io = ImGui.GetIO();
-            // Build
-            ImTextureDataPtr texData = io.Fonts.TexData;
-            IntPtr pixels = texData.GetPixels();
-            int width = texData.Width;
-            int height = texData.Height;
-            int bytesPerPixel = texData.BytesPerPixel;
-            // Store our identifier
-            texData.SetTexID(_fontAtlasID);
-
-            _fontTexture = gd.ResourceFactory.CreateTexture(TextureDescription.Texture2D(
-                (uint)width,
-                (uint)height,
-                1,
-                1,
-                PixelFormat.R8_G8_B8_A8_UNorm,
-                TextureUsage.Sampled));
-            _fontTexture.Name = "ImGui.NET Font Texture";
-            gd.UpdateTexture(
-                _fontTexture,
-                pixels,
-                (uint)(bytesPerPixel * width * height),
-                0,
-                0,
-                0,
-                (uint)width,
-                (uint)height,
-                1,
-                0,
-                0);
-            _fontTextureView = gd.ResourceFactory.CreateTextureView(_fontTexture);
-
-            io.Fonts.ClearTexData();
         }
 
         /// <summary>
@@ -420,6 +387,8 @@ namespace ImGuiNET
             uint vertexOffsetInVertices = 0;
             uint indexOffsetInElements = 0;
 
+            ProcessTextureUpdates(draw_data, gd);
+
             if (draw_data.CmdListsCount == 0)
             {
                 return;
@@ -496,14 +465,7 @@ namespace ImGuiNET
                         IntPtr textureId = pcmd.GetTexID();
                         if (textureId != IntPtr.Zero)
                         {
-                            if (textureId == _fontAtlasID)
-                            {
-                                cl.SetGraphicsResourceSet(1, _fontTextureResourceSet);
-                            }
-                            else
-                            {
-                                cl.SetGraphicsResourceSet(1, GetImageResourceSet(textureId));
-                            }
+                            cl.SetGraphicsResourceSet(1, GetImageResourceSet(textureId));
                         }
 
                         cl.SetScissorRect(
@@ -521,6 +483,105 @@ namespace ImGuiNET
             }
         }
 
+        private unsafe void ProcessTextureUpdates(ImDrawDataPtr drawData, GraphicsDevice gd)
+        {
+            if (drawData.NativePtr->Textures == null)
+            {
+                return;
+            }
+
+            ImVector<ImTextureDataPtr> textures = drawData.Textures;
+            for (int i = 0; i < textures.Size; i++)
+            {
+                ImTextureDataPtr texData = textures[i];
+                switch (texData.Status)
+                {
+                    case ImTextureStatus.WantCreate:
+                        CreateBackendTexture(texData, gd);
+                        break;
+                    case ImTextureStatus.WantUpdates:
+                        UpdateBackendTexture(texData, gd);
+                        break;
+                    case ImTextureStatus.WantDestroy when texData.UnusedFrames > 0:
+                        DestroyBackendTexture(texData);
+                        break;
+                }
+            }
+        }
+
+        private unsafe void CreateBackendTexture(ImTextureDataPtr texData, GraphicsDevice gd)
+        {
+            if (texData.Format != ImTextureFormat.RGBA32)
+            {
+                throw new NotSupportedException($"Unsupported ImGui texture format: {texData.Format}");
+            }
+
+            Texture texture = gd.ResourceFactory.CreateTexture(TextureDescription.Texture2D(
+                (uint)texData.Width,
+                (uint)texData.Height,
+                1,
+                1,
+                PixelFormat.R8_G8_B8_A8_UNorm,
+                TextureUsage.Sampled));
+            texture.Name = "ImGui.NET Backend Texture";
+
+            gd.UpdateTexture(
+                texture,
+                texData.GetPixels(),
+                (uint)texData.GetSizeInBytes(),
+                0,
+                0,
+                0,
+                (uint)texData.Width,
+                (uint)texData.Height,
+                1,
+                0,
+                0);
+
+            TextureView textureView = gd.ResourceFactory.CreateTextureView(texture);
+            ResourceSet resourceSet = gd.ResourceFactory.CreateResourceSet(new ResourceSetDescription(_textureLayout, textureView));
+            ResourceSetInfo resourceInfo = new ResourceSetInfo(GetNextImGuiBindingID(), texture, textureView, resourceSet, ownsTextureResources: true);
+
+            _viewsById.Add(resourceInfo.ImGuiBinding, resourceInfo);
+            texData.SetTexID(resourceInfo.ImGuiBinding);
+            texData.SetStatus(ImTextureStatus.OK);
+        }
+
+        private unsafe void UpdateBackendTexture(ImTextureDataPtr texData, GraphicsDevice gd)
+        {
+            if (!_viewsById.TryGetValue(texData.TexID, out ResourceSetInfo resourceInfo) || resourceInfo.Texture == null)
+            {
+                throw new InvalidOperationException("Cannot update an ImGui texture that was not created by this renderer.");
+            }
+
+            gd.UpdateTexture(
+                resourceInfo.Texture,
+                texData.GetPixels(),
+                (uint)texData.GetSizeInBytes(),
+                0,
+                0,
+                0,
+                (uint)texData.Width,
+                (uint)texData.Height,
+                1,
+                0,
+                0);
+            texData.SetStatus(ImTextureStatus.OK);
+        }
+
+        private void DestroyBackendTexture(ImTextureDataPtr texData)
+        {
+            IntPtr textureId = texData.TexID;
+            if (_viewsById.TryGetValue(textureId, out ResourceSetInfo resourceInfo))
+            {
+                resourceInfo.DisposeOwnedResources();
+                _viewsById.Remove(textureId);
+            }
+
+            texData.SetTexID(IntPtr.Zero);
+            texData.SetStatus(ImTextureStatus.Destroyed);
+        }
+
         /// <summary>
         /// Frees all graphics resources used by the renderer.
         /// </summary>
@@ -529,8 +590,6 @@ namespace ImGuiNET
             _vertexBuffer.Dispose();
             _indexBuffer.Dispose();
             _projMatrixBuffer.Dispose();
-            _fontTexture.Dispose();
-            _fontTextureView.Dispose();
             _vertexShader.Dispose();
             _fragmentShader.Dispose();
             _layout.Dispose();
@@ -542,17 +601,41 @@ namespace ImGuiNET
             {
                 resource.Dispose();
             }
+
+            foreach (ResourceSetInfo resourceInfo in _viewsById.Values)
+            {
+                resourceInfo.DisposeOwnedResources();
+            }
         }
 
-        private struct ResourceSetInfo
+        private sealed class ResourceSetInfo
         {
             public readonly IntPtr ImGuiBinding;
+            public readonly Texture Texture;
+            public readonly TextureView TextureView;
             public readonly ResourceSet ResourceSet;
+            private readonly bool _ownsTextureResources;
+            public bool OwnsTextureResources => _ownsTextureResources;
 
-            public ResourceSetInfo(IntPtr imGuiBinding, ResourceSet resourceSet)
+            public ResourceSetInfo(IntPtr imGuiBinding, Texture texture, TextureView textureView, ResourceSet resourceSet, bool ownsTextureResources)
             {
                 ImGuiBinding = imGuiBinding;
+                Texture = texture;
+                TextureView = textureView;
                 ResourceSet = resourceSet;
+                _ownsTextureResources = ownsTextureResources;
+            }
+
+            public void DisposeOwnedResources()
+            {
+                if (!_ownsTextureResources)
+                {
+                    return;
+                }
+
+                ResourceSet.Dispose();
+                TextureView.Dispose();
+                Texture.Dispose();
             }
         }
     }
