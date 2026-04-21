@@ -74,6 +74,48 @@ bin/Release/CodeGenerator/net8.0/CodeGenerator.exe "src/ImNodes.NET/Generated" c
 
 # ImGuizmo
 bin/Release/CodeGenerator/net8.0/CodeGenerator.exe "src/ImGuizmo.NET/Generated" cimguizmo
+
+# ImPlot3D
+bin/Release/CodeGenerator/net8.0/CodeGenerator.exe "src/ImPlot3D.NET/Generated" cimplot3d
+
+# ImNodesR
+bin/Release/CodeGenerator/net8.0/CodeGenerator.exe "src/ImNodesR.NET/Generated" cimnodes_r
+
+# ImGuizmoQuat
+bin/Release/CodeGenerator/net8.0/CodeGenerator.exe "src/ImGuizmoQuat.NET/Generated" cimguizmo_quat
+
+# CimCTE
+bin/Release/CodeGenerator/net8.0/CodeGenerator.exe "src/CimCTE.NET/Generated" cimCTE
+```
+
+## FreeType and custom_assert examples
+
+### FreeType font loader (C#)
+
+```csharp
+ImGuiIOPtr io = ImGui.GetIO();
+IntPtr freeTypeLoader = ImGui.GetFontLoader();
+if (freeTypeLoader != IntPtr.Zero)
+{
+    io.Fonts.SetFontLoader(freeTypeLoader);
+    io.Fonts.FontLoaderFlags = (uint)ImGuiFreeTypeLoaderFlags.LightHinting;
+}
+```
+
+### custom_assert behavior (C# runtime toggle)
+
+```csharp
+ImGuiIOPtr io = ImGui.GetIO();
+io.ConfigErrorRecoveryEnableAssert = true;
+```
+
+With native builds compiled with `custom_assert`, assertion failures are routed by the native assert hook.
+
+### custom_assert hook (native build side)
+
+```cpp
+// Example at native build integration layer:
+// #define IM_ASSERT(_EXPR) CustomAssert((_EXPR), #_EXPR, __FILE__, __LINE__)
 ```
 
 ## Build
@@ -92,3 +134,9 @@ dotnet build src
 
 - `Generated/*.gen.cs` files are generated artifacts and should not be edited manually.
 - Manual wrapper behavior should be changed in `*.Manual.cs` files.
+
+## Release 1.92.7v2
+
+- Updated native deps/definitions from `psydack/ImGui.NET-nativebuild` tag `1.92.7`.
+- Regenerated bindings for ImGui, ImPlot, ImPlot3D, ImNodes, ImNodesR, ImGuizmo, ImGuizmoQuat and CimCTE.
+- Added FreeType and `custom_assert` usage examples to sample/docs.
