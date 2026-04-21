@@ -42,6 +42,8 @@ namespace ImGuiNET
         private static bool _showImNodesWindow = true;
         private static bool _showImNodesRWindow = true;
         private static bool _showCimCTEWindow = true;
+        private static bool _showRuntimeFeaturesWindow = true;
+        private static bool _configErrorRecoveryEnableAssert = true;
 
         // ImPlot state
         private static readonly float[] _sinData = Enumerable.Range(0, 100).Select(i => (float)Math.Sin(i * 0.1)).ToArray();
@@ -112,6 +114,15 @@ namespace ImGuiNET
             _cl = _gd.ResourceFactory.CreateCommandList();
             _controller = new ImGuiController(_gd, _gd.MainSwapchain.Framebuffer.OutputDescription, _window.Width, _window.Height);
             // _memoryEditor = new MemoryEditor();
+
+            ImGuiIOPtr io = ImGui.GetIO();
+            IntPtr freeTypeLoader = ImGui.GetFontLoader();
+            if (freeTypeLoader != IntPtr.Zero)
+            {
+                io.Fonts.SetFontLoader(freeTypeLoader);
+                io.Fonts.FontLoaderFlags = (uint)ImGuiFreeTypeLoaderFlags.LightHinting;
+            }
+            io.ConfigErrorRecoveryEnableAssert = _configErrorRecoveryEnableAssert;
 
             IntPtr imGuiContext = ImGui.GetCurrentContext();
             ImPlot.CreateContext();
@@ -191,6 +202,7 @@ namespace ImGuiNET
                 ImGui.Checkbox("ImNodes Demo", ref _showImNodesWindow);
                 ImGui.Checkbox("ImNodesR Demo", ref _showImNodesRWindow);
                 ImGui.Checkbox("cimCTE Smoke", ref _showCimCTEWindow);
+                ImGui.Checkbox("Runtime Features", ref _showRuntimeFeaturesWindow);
                 if (ImGui.Button("Button"))                                         // Buttons return true when clicked (NB: most widgets return true when edited/activated)
                     _counter++;
                 ImGui.SameLine(0, -1);
@@ -382,6 +394,34 @@ namespace ImGuiNET
                 ImGui.Begin("cimCTE Smoke", ref _showCimCTEWindow);
                 bool isWord = CimCTENative.CodePoint_isWord('A') != 0;
                 ImGui.Text($"CodePoint.isWord('A') = {isWord}");
+                ImGui.End();
+            }
+
+            if (_showRuntimeFeaturesWindow)
+            {
+                ImGui.Begin("Runtime Features", ref _showRuntimeFeaturesWindow);
+                IntPtr freeTypeLoader = ImGui.GetFontLoader();
+                bool hasFreeType = freeTypeLoader != IntPtr.Zero;
+                ImGui.Text($"FreeType font loader available: {hasFreeType}");
+                if (hasFreeType)
+                {
+                    if (ImGui.Button("Use FreeType LightHinting"))
+                    {
+                        ImGui.GetIO().Fonts.SetFontLoader(freeTypeLoader);
+                        ImGui.GetIO().Fonts.FontLoaderFlags = (uint)ImGuiFreeTypeLoaderFlags.LightHinting;
+                    }
+                }
+                else
+                {
+                    ImGui.TextUnformatted("Native cimgui build does not expose FreeType loader.");
+                }
+
+                ImGui.Separator();
+                if (ImGui.Checkbox("ConfigErrorRecoveryEnableAssert", ref _configErrorRecoveryEnableAssert))
+                {
+                    ImGui.GetIO().ConfigErrorRecoveryEnableAssert = _configErrorRecoveryEnableAssert;
+                }
+                ImGui.TextUnformatted("With custom_assert-enabled native builds, assertion failures are routed through the custom assert hook.");
                 ImGui.End();
             }
 
