@@ -44,6 +44,7 @@ namespace ImGuiNET
         private static bool _showCimCTEWindow = true;
         private static bool _showRuntimeFeaturesWindow = true;
         private static bool _configErrorRecoveryEnableAssert = true;
+        private static bool _isFreeTypeLoaderAvailable = true;
 
         // ImPlot state
         private static readonly float[] _sinData = Enumerable.Range(0, 100).Select(i => (float)Math.Sin(i * 0.1)).ToArray();
@@ -98,6 +99,36 @@ namespace ImGuiNET
             _gizmoProjection[14] = (2f * far * near) / (near - far);
         }
 
+        private static bool TryGetFreeTypeLoader(out IntPtr freeTypeLoader)
+        {
+            freeTypeLoader = IntPtr.Zero;
+            if (!_isFreeTypeLoaderAvailable)
+            {
+                return false;
+            }
+
+            try
+            {
+                freeTypeLoader = ImGui.GetFontLoader();
+                return freeTypeLoader != IntPtr.Zero;
+            }
+            catch (EntryPointNotFoundException)
+            {
+                _isFreeTypeLoaderAvailable = false;
+                return false;
+            }
+            catch (DllNotFoundException)
+            {
+                _isFreeTypeLoaderAvailable = false;
+                return false;
+            }
+            catch (BadImageFormatException)
+            {
+                _isFreeTypeLoaderAvailable = false;
+                return false;
+            }
+        }
+
         static void Main(string[] args)
         {
             // Create window, GraphicsDevice, and all resources necessary for the demo.
@@ -116,8 +147,7 @@ namespace ImGuiNET
             // _memoryEditor = new MemoryEditor();
 
             ImGuiIOPtr io = ImGui.GetIO();
-            IntPtr freeTypeLoader = ImGui.GetFontLoader();
-            if (freeTypeLoader != IntPtr.Zero)
+            if (TryGetFreeTypeLoader(out IntPtr freeTypeLoader))
             {
                 io.Fonts.SetFontLoader(freeTypeLoader);
                 io.Fonts.FontLoaderFlags = (uint)ImGuiFreeTypeLoaderFlags.LightHinting;
@@ -400,8 +430,7 @@ namespace ImGuiNET
             if (_showRuntimeFeaturesWindow)
             {
                 ImGui.Begin("Runtime Features", ref _showRuntimeFeaturesWindow);
-                IntPtr freeTypeLoader = ImGui.GetFontLoader();
-                bool hasFreeType = freeTypeLoader != IntPtr.Zero;
+                bool hasFreeType = TryGetFreeTypeLoader(out IntPtr freeTypeLoader);
                 ImGui.Text($"FreeType font loader available: {hasFreeType}");
                 if (hasFreeType)
                 {
