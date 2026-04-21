@@ -1,5 +1,6 @@
-﻿using System;
+using System;
 using System.Diagnostics;
+using System.IO;
 using System.Linq;
 using System.Numerics;
 using CimCTENET;
@@ -45,6 +46,9 @@ namespace ImGuiNET
         private static bool _showRuntimeFeaturesWindow = true;
         private static bool _configErrorRecoveryEnableAssert = true;
         private static bool _isFreeTypeLoaderAvailable = true;
+        private static ImFontPtr _newClearMinchoFont;
+        private static bool _hasNewClearMinchoFont;
+        private static string _newClearMinchoLoadStatus = "Font load not attempted.";
 
         // ImPlot state
         private static readonly float[] _sinData = Enumerable.Range(0, 100).Select(i => (float)Math.Sin(i * 0.1)).ToArray();
@@ -129,6 +133,28 @@ namespace ImGuiNET
             }
         }
 
+        private static unsafe void TryLoadNewClearMinchoFont(ImGuiIOPtr io)
+        {
+            string fontPath = Path.Combine(AppContext.BaseDirectory, "Fonts", "NewClear-mincho.ttf");
+            if (!File.Exists(fontPath))
+            {
+                _hasNewClearMinchoFont = false;
+                _newClearMinchoLoadStatus = $"Font file not found at '{fontPath}'.";
+                return;
+            }
+
+            _newClearMinchoFont = io.Fonts.AddFontFromFileTTF(fontPath, 20f);
+            _hasNewClearMinchoFont = _newClearMinchoFont.NativePtr != null;
+            if (!_hasNewClearMinchoFont)
+            {
+                _newClearMinchoLoadStatus = "ImGui failed to create the font from file.";
+                return;
+            }
+
+            io.NativePtr->FontDefault = _newClearMinchoFont.NativePtr;
+            _newClearMinchoLoadStatus = $"Loaded NewClear-mincho.ttf from '{fontPath}'.";
+        }
+
         static void Main(string[] args)
         {
             // Create window, GraphicsDevice, and all resources necessary for the demo.
@@ -153,6 +179,7 @@ namespace ImGuiNET
                 io.Fonts.FontLoaderFlags = (uint)ImGuiFreeTypeLoaderFlags.LightHinting;
             }
             io.ConfigErrorRecoveryEnableAssert = _configErrorRecoveryEnableAssert;
+            TryLoadNewClearMinchoFont(io);
 
             IntPtr imGuiContext = ImGui.GetCurrentContext();
             ImPlot.CreateContext();
@@ -451,6 +478,15 @@ namespace ImGuiNET
                     ImGui.GetIO().ConfigErrorRecoveryEnableAssert = _configErrorRecoveryEnableAssert;
                 }
                 ImGui.TextUnformatted("With custom_assert-enabled native builds, assertion failures are routed through the custom assert hook.");
+                ImGui.Separator();
+                ImGui.Text($"NewClear-mincho load status: {_newClearMinchoLoadStatus}");
+                if (_hasNewClearMinchoFont)
+                {
+                    ImGui.PushFont(_newClearMinchoFont, 20f);
+                    ImGui.TextUnformatted("NewClear-mincho preview: The quick brown fox jumps over the lazy dog.");
+                    ImGui.TextUnformatted("Japanese preview: こんにちは世界 / カタカナ / 漢字");
+                    ImGui.PopFont();
+                }
                 ImGui.End();
             }
 
