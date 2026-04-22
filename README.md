@@ -134,10 +134,3 @@ dotnet build src
 
 - `Generated/*.gen.cs` files are generated artifacts and should not be edited manually.
 - Manual wrapper behavior should be changed in `*.Manual.cs` files.
-
-## Release 1.92.7v2
-
-- Updated native deps/definitions from `psydack/ImGui.NET-nativebuild` tag `1.92.7`.
-- Regenerated bindings for ImGui, ImPlot, ImPlot3D, ImNodes, ImNodesR, ImGuizmo, ImGuizmoQuat and CimCTE.
-- Added FreeType and `custom_assert` usage examples to sample/docs.
-- Native dependency refresh check executed on 2026-04-21 with no additional binary/definition diffs.
